@@ -7,7 +7,8 @@ An interactive CLI tool that scaffolds production-ready Terraform configurations
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew install NipulM/ois
+brew tap NipulM/ois
+brew install ois
 ```
 
 <!-- ### From Source
