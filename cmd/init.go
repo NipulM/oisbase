@@ -77,7 +77,7 @@ var initCmd = &cobra.Command{
 
 		fmt.Println("\n🎉 Project created successfully!")
 		fmt.Printf("📂 Next steps:\n")
-		fmt.Printf("   oisbase add lambda  # Add a Lambda function\n")
+		fmt.Printf("ois add lambda  # Add a Lambda function\n")
 	},
 }
 
