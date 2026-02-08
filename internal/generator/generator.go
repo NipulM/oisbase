@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/NipulM/terraplate/internal/prompts"
-	"github.com/NipulM/terraplate/internal/utils"
+	"github.com/NipulM/oisbase/internal/prompts"
+	"github.com/NipulM/oisbase/internal/utils"
 )
 
 func GenerateReadme(config *prompts.ProjectConfig) {

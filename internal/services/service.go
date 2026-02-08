@@ -3,7 +3,7 @@ package services
 import (
 	"fmt"
 
-	aws "github.com/NipulM/terraplate/internal/services/aws/lambda"
+	aws "github.com/NipulM/oisbase/internal/services/aws/lambda"
 )
 
 type Service interface {

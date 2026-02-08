@@ -3,8 +3,12 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/NipulM/terraplate/internal/config"
-	"github.com/NipulM/terraplate/internal/prompts"
+	"os"
+	"path/filepath"
+
+	"github.com/NipulM/oisbase/internal/config"
+	"github.com/NipulM/oisbase/internal/generator"
+	"github.com/NipulM/oisbase/internal/prompts"
 	"github.com/spf13/cobra"
 )
 
@@ -31,37 +35,32 @@ var initCmd = &cobra.Command{
 		// Create project structure in current directory
 		// Create environments directories
 
-		// TODO: PLEASE ADD THIS BACK IN
-		// for _, env := range promptConfig.Environments {
-		// 	envPath := filepath.Join("environments", env)
-		// 	if err := os.MkdirAll(envPath, 0755); err != nil {
-		// 		fmt.Printf("Error creating environment directory: %v\n", err)
-		// 		return
-		// 	}
-		// }
+		for _, env := range promptConfig.Environments {
+			envPath := filepath.Join("environments", env)
+			if err := os.MkdirAll(envPath, 0755); err != nil {
+				fmt.Printf("Error creating environment directory: %v\n", err)
+				return
+			}
+		}
 
-		// TODO: PLEASE ADD THIS BACK IN
-		// // Create modules directory
-		// if err := os.MkdirAll("modules", 0755); err != nil {
-		// 	fmt.Printf("Error creating modules directory: %v\n", err)
-		// 	return
-		// }
+		if err := os.MkdirAll("modules", 0755); err != nil {
+			fmt.Printf("Error creating modules directory: %v\n", err)
+			return
+		}
 
 		// Generate README
-		// TODO: PLEASE ADD THIS BACK IN
-		// generator.GenerateReadme(promptConfig)
-		// if err != nil {
-		// 	fmt.Printf("Error generating README: %v\n", err)
-		// 	return
-		// }
+		generator.GenerateReadme(promptConfig)
+		if err != nil {
+			fmt.Printf("Error generating README: %v\n", err)
+			return
+		}
 
 		// Copy modules
-		// TODO: PLEASE ADD THIS BACK IN
-		// generator.CopyModules(promptConfig)
-		// if err != nil {
-		// 	fmt.Printf("Error copying modules: %v\n", err)
-		// 	return
-		// }
+		generator.CopyModules(promptConfig)
+		if err != nil {
+			fmt.Printf("Error copying modules: %v\n", err)
+			return
+		}
 
 		// Save project configuration in current directory
 		projectConfig := &config.ProjectConfig{
@@ -78,7 +77,7 @@ var initCmd = &cobra.Command{
 
 		fmt.Println("\n🎉 Project created successfully!")
 		fmt.Printf("📂 Next steps:\n")
-		fmt.Printf("   terraplate add lambda  # Add a Lambda function\n")
+		fmt.Printf("   oisbase add lambda  # Add a Lambda function\n")
 	},
 }
 

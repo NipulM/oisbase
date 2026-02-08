@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/NipulM/terraplate/internal/config"
-	"github.com/NipulM/terraplate/internal/services"
+	"github.com/NipulM/oisbase/internal/config"
+	"github.com/NipulM/oisbase/internal/services"
 	"github.com/spf13/cobra"
 )
 
@@ -19,11 +19,11 @@ var addCmd = &cobra.Command{
 
 		fmt.Printf("🔧 Adding %s to your project...\n\n", serviceName)
 
-		// Load project-level config from .terraplate.json
+		// Load project-level config from .oisbase.json
 		projectCfg, err := config.LoadConfig()
 		if err != nil {
 			fmt.Printf("❌ Error: %v\n", err)
-			fmt.Println("Run 'terraplate init' first to initialize your project.")
+			fmt.Println("Run 'oisbase init' first to initialize your project.")
 			os.Exit(1)
 		}
 

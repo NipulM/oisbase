@@ -1,4 +1,4 @@
-module github.com/NipulM/terraplate
+module github.com/NipulM/oisbase
 
 go 1.25.6
 

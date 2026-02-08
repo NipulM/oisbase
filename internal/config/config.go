@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const ConfigFileName = ".terraplate.json"
+const ConfigFileName = ".oisbase.json"
 
 type ProjectConfig struct {
 	ProjectName  string   `json:"project_name"`
@@ -16,7 +16,7 @@ type ProjectConfig struct {
 	Services     []string `json:"services"`
 }
 
-// SaveConfig saves the project configuration to .terraplate.json in current directory
+// SaveConfig saves the project configuration to .oisbase.json in current directory
 func SaveConfig(config *ProjectConfig) error {
 	config.ProjectName = strings.ToLower(config.ProjectName)
 	data, err := json.MarshalIndent(config, "", "  ")
@@ -32,12 +32,12 @@ func SaveConfig(config *ProjectConfig) error {
 	return nil
 }
 
-// LoadConfig loads the project configuration from .terraplate.json
+// LoadConfig loads the project configuration from .oisbase.json
 func LoadConfig() (*ProjectConfig, error) {
-	// Look for .terraplate.json in current directory
+	// Look for .oisbase.json in current directory
 	data, err := os.ReadFile(ConfigFileName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file (are you in a terraplate project?): %w", err)
+		return nil, fmt.Errorf("failed to read config file (are you in a oisbase project?): %w", err)
 	}
 
 	var config ProjectConfig

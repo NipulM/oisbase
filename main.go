@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/NipulM/terraplate/cmd"
+	"github.com/NipulM/oisbase/cmd"
 )
 
 func main() {

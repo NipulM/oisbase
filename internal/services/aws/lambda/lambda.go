@@ -49,6 +49,14 @@ func (l *LambdaService) GetConfig() (map[string]interface{}, error) {
 	return config, nil
 }
 
+// environmentGroup returns "production" for prod, "pre-production" for everything else.
+func environmentGroup(env string) string {
+	if env == "prod" {
+		return "production"
+	}
+	return "pre-production"
+}
+
 func (l *LambdaService) GenerateModule(config map[string]interface{}) (string, error) {
 	environments := config["environments"].([]string)
 	functionName := config["function_name"].(string)
@@ -58,8 +66,10 @@ func (l *LambdaService) GenerateModule(config map[string]interface{}) (string, e
 	var results []string
 
 	for _, environment := range environments {
-		// Create service directory structure: environments/{env}/lambda/
-		serviceDir := filepath.Join("environments", environment, "lambda")
+		group := environmentGroup(environment)
+
+		// Create service directory structure: environments/{group}/{env}/lambda/
+		serviceDir := filepath.Join("environments", group, environment, "lambda")
 		if err := os.MkdirAll(serviceDir, 0755); err != nil {
 			return "", fmt.Errorf("failed to create lambda service directory: %w", err)
 		}
@@ -74,7 +84,7 @@ func (l *LambdaService) GenerateModule(config map[string]interface{}) (string, e
 			return "", err
 		}
 
-		// Create function instance directory: environments/{env}/lambda/{function-name}/
+		// Create function instance directory: environments/{group}/{env}/lambda/{function-name}/
 		instanceDir := filepath.Join(serviceDir, functionName)
 		if err := os.MkdirAll(instanceDir, 0755); err != nil {
 			return "", fmt.Errorf("failed to create function instance directory: %w", err)
@@ -92,7 +102,7 @@ func (l *LambdaService) GenerateModule(config map[string]interface{}) (string, e
 			return "", err
 		}
 
-		results = append(results, fmt.Sprintf("  ✓ [%s] Created Lambda function: %s", environment, functionName))
+		results = append(results, fmt.Sprintf("  ✓ [%s/%s] Created Lambda function: %s", group, environment, functionName))
 	}
 
 	return strings.Join(results, "\n"), nil
@@ -170,14 +180,9 @@ func (l *LambdaService) generateInstanceFiles(instanceDir string, config map[str
 	}
 
 	for tmplName, fileName := range templateFiles {
-		fmt.Printf("  🔍 Looking for template: %s\n", tmplName)
-
-
 		if tmpl.Lookup(tmplName) == nil {
 			continue
 		}
-
-		fmt.Printf("  ✓ Found template: %s\n", tmplName)
 
 		var out bytes.Buffer
 		if err := tmpl.ExecuteTemplate(&out, tmplName, config); err != nil {
@@ -185,13 +190,9 @@ func (l *LambdaService) generateInstanceFiles(instanceDir string, config map[str
 		}
 
 		filePath := filepath.Join(instanceDir, fileName)
-		fmt.Printf("  💾 Writing to: %s\n", filePath)
 		if err := os.WriteFile(filePath, out.Bytes(), 0644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", fileName, err)
 		}
-
-		fmt.Printf("  ✅ Created: %s\n", fileName)
-
 	}
 
 	return nil

@@ -1,14 +1,14 @@
 package cmd
 
 import (
-    "fmt"
-    "os"
-    
-    "github.com/spf13/cobra"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
-    Use:   "terraplate",
+    Use:   "oisbase",
     Short: "Generate AWS Terraform infrastructure templates",
     Long:  `An interactive CLI tool to scaffold production-ready Terraform configurations for AWS infrastructure.`,
 }
