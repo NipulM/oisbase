@@ -1,0 +1,29 @@
+variable "aws_region" {
+  type    = string
+  default = "{{ .region }}"
+}
+
+variable "environment" {
+  type    = string
+  default = "{{ .environment }}"
+}
+
+variable "app_name" {
+  type    = string
+  default = "{{ .project_name }}"
+}
+
+variable "lambda_name" {
+  type    = string
+  default = "{{ .function_name }}"
+}
+
+variable "s3_bucket_name" {
+  type    = string
+  default = "{{ .s3_bucket }}"
+}
+
+variable "s3_bucket_key" {
+  type    = string
+  default = "{{ .function_name }}/deployment.zip"
+}

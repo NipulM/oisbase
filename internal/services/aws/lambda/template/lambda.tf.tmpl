@@ -1,0 +1,32 @@
+{{ $fn := .function_name | replace "-" "_" }}
+module "lambda_{{ $fn }}" {
+  source        = "../../../../modules/lambda"
+  function_name = "{{ .function_name }}"
+  iam_role_arn  = aws_iam_role.lambda_execution.arn
+  handler       = "{{ .handler }}"
+  runtime       = "{{ .runtime }}"
+  timeout       = 30
+  memory_size   = 128
+  s3_bucket     = "{{ .s3_bucket }}"
+  s3_key        = "{{ .function_name }}/deployment.zip"
+  environment   = "{{ .environment }}"
+
+  # Add the environment variables
+  # environment_variables = {
+  #   REGION    = {{ .region }}
+  #   NODE_ENV  = {{ .environment }}
+  # }
+}
+
+resource "aws_ssm_parameter" "lambda_{{ $fn }}_arn" {
+  name  = "/{{ .project_name }}/{{ .environment }}/services/lambda/{{ .function_name }}/arn"
+  type  = "String"
+  value = module.lambda_{{ $fn }}.lambda_arn
+}
+
+resource "aws_ssm_parameter" "lambda_{{ $fn }}_name" {
+  name  = "/{{ .project_name }}/{{ .environment }}/services/lambda/{{ .function_name }}/name"
+  type  = "String"
+  value = module.lambda_{{ $fn }}.lambda_name
+}
+
