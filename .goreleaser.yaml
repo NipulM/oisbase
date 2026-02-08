@@ -1,5 +1,3 @@
-version: 2
-
 before:
   hooks:
     - go mod tidy
@@ -41,15 +39,12 @@ changelog:
 
 brews:
   - name: ois
+    tap:
+      owner: NipulM
+      name: homebrew-ois
+      token: "{{ .Env.HOMEBREW_OIS_GITHUB_TOKEN }}"
+    folder: Formula
     homepage: https://github.com/NipulM/oisbase
     description: "Orchestrated Infrastructure Scaffolder - Generate production-ready Terraform for Cloud Infrastructure"
-    repository:
-      owner: NipulM
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_OIS_GITHUB_TOKEN }}"
-    commit_author:
-      name: Nipul M
-      email: nipulm03@gmail.com
-    folder: Formula
     install: |
       bin.install "ois"
