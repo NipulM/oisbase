@@ -8,7 +8,7 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-    Use:   "oisbase",
+    Use:   "ois",
     Short: "Generate AWS Terraform infrastructure templates",
     Long:  `An interactive CLI tool to scaffold production-ready Terraform configurations for AWS infrastructure.`,
 }

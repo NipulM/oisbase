@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"os"
-	"path/filepath"
 
 	"github.com/NipulM/oisbase/internal/config"
 	"github.com/NipulM/oisbase/internal/generator"
@@ -33,16 +32,6 @@ var initCmd = &cobra.Command{
 		fmt.Println("\n📦 Generating your Terraform configuration...")
 
 		// Create project structure in current directory
-		// Create environments directories
-
-		for _, env := range promptConfig.Environments {
-			envPath := filepath.Join("environments", env)
-			if err := os.MkdirAll(envPath, 0755); err != nil {
-				fmt.Printf("Error creating environment directory: %v\n", err)
-				return
-			}
-		}
-
 		if err := os.MkdirAll("modules", 0755); err != nil {
 			fmt.Printf("Error creating modules directory: %v\n", err)
 			return
