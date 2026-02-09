@@ -2,7 +2,7 @@
 module "lambda_{{ $fn }}" {
   source        = "../../../../../modules/lambda"
   function_name = "{{ .function_name }}"
-  iam_role_arn  = aws_iam_role.lambda_execution.arn
+  iam_role_arn  = aws_iam_role.lambda_role.arn
   handler       = "{{ .handler }}"
   runtime       = "{{ .runtime }}"
   timeout       = 30
