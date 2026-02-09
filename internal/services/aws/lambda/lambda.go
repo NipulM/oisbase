@@ -35,7 +35,7 @@ func (l *LambdaService) GetConfig() (map[string]interface{}, error) {
 	survey.AskOne(&survey.Select{
 		Message: "Runtime:",
 		Default: "nodejs20.x",
-		Options: []string{"python3.9", "python3.11", "nodejs18.x", "nodejs20.x"},
+		Options: []string{"python3.9", "python3.11", "nodejs20.x"},
 	}, &runtime)
 	config["runtime"] = runtime
 
