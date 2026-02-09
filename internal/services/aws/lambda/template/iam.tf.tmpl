@@ -1,5 +1,5 @@
 resource "aws_iam_role" "lambda_role" {
-  name = "{{ .project_name }}-{{ .function_name }}-role-{{ .environment }}"
+  name = "${var.app_name}-${var.function_name}-role-${var.environment}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -12,8 +12,8 @@ resource "aws_iam_role" "lambda_role" {
 }
 
 resource "aws_iam_policy" "lambda_cloudwatch_policy" {
-  name        = "{{ .project_name }}-{{ .function_name }}-cloudwatch-policy-{{ .environment }}"
-  description = "{{ .project_name }} IAM policy for Lambda to write logs to CloudWatch"
+  name        = "${var.app_name}-${var.function_name}-cloudwatch-policy-${var.environment}"
+  description = "${var.app_name} IAM policy for Lambda to write logs to CloudWatch"
 
   policy = jsonencode({
     Version = "2012-10-17"

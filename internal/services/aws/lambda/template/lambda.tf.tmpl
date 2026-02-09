@@ -1,15 +1,15 @@
 {{ $fn := .function_name | replace "-" "_" }}
 module "lambda_{{ $fn }}" {
   source        = "../../../../../modules/lambda"
-  function_name = "{{ .function_name }}"
+  function_name = "${var.app_name}-${var.lambda_name}-${var.environment}"
   iam_role_arn  = aws_iam_role.lambda_role.arn
   handler       = "{{ .handler }}"
   runtime       = "{{ .runtime }}"
   timeout       = 30
   memory_size   = 128
-  s3_bucket     = "{{ .s3_bucket }}"
-  s3_key        = "{{ .function_name }}/deployment.zip"
-  environment   = "{{ .environment }}"
+  s3_bucket     = "${var.app_name}-${var.s3_bucket_name}-${var.environment}"
+  s3_key        = "${var.bucket_key}"
+  environment   = var.environment
 
   # Add the environment variables
   # environment_variables = {
@@ -19,13 +19,13 @@ module "lambda_{{ $fn }}" {
 }
 
 resource "aws_ssm_parameter" "lambda_{{ $fn }}_arn" {
-  name  = "/{{ .project_name }}/{{ .environment }}/services/lambda/{{ .function_name }}/arn"
+  name  = "/${var.app_name}/${var.environment}/services/lambda/${var.lambda_name}/arn"
   type  = "String"
   value = module.lambda_{{ $fn }}.lambda_arn
 }
 
 resource "aws_ssm_parameter" "lambda_{{ $fn }}_name" {
-  name  = "/{{ .project_name }}/{{ .environment }}/services/lambda/{{ .function_name }}/name"
+  name  = "/${var.app_name}/${var.environment}/services/lambda/${var.lambda_name}/name"
   type  = "String"
   value = module.lambda_{{ $fn }}.lambda_name
 }
