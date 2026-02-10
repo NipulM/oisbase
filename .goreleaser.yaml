@@ -2,6 +2,10 @@ before:
   hooks:
     - go mod tidy
 
+release:
+  prerelease: auto
+  make_latest: true
+
 builds:
   - env:
       - CGO_ENABLED=0

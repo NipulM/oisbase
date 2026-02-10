@@ -8,7 +8,7 @@ module "lambda_{{ $fn }}" {
   timeout       = 30
   memory_size   = 128
   s3_bucket     = "${var.app_name}-${var.s3_bucket_name}-${var.environment}"
-  s3_key        = "${var.bucket_key}"
+  s3_key        = "${var.s3_bucket_name}"
   environment   = var.environment
 
   # Add the environment variables
