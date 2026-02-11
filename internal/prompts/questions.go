@@ -47,11 +47,11 @@ func GetProjectConfig() (*ProjectConfig, error) {
             // "RDS (Relational Database)",
             // "ECS (Container Service)",
             "Lambda (Serverless Functions)",
+            "DynamoDB (NoSQL Database)",
             // "Lambda ECR (Serverless Functions with ECR)",
             // "S3 (Object Storage)",
             // "ALB (Application Load Balancer)",
             // "CloudFront (CDN)",
-            // "DynamoDB (NoSQL Database)",
         },
     }
     var selectedServices []string
