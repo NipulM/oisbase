@@ -27,6 +27,7 @@ func (d *DynamoDBService) GetConfig() (map[string]interface{}, error) {
 		Message: "DynamoDB table name:",
 	}, &tableName, survey.WithValidator(survey.Required))
 	config["table_name"] = tableName
+	config["instance_name"] = tableName
 
 	return config, nil
 }

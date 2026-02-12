@@ -54,6 +54,15 @@ var addCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		// Add the service instance to the project config
+		projectCfg.AddServiceInstance(serviceName, svcConfig["instance_name"].(string))
+
+		// Save the project config
+		if err := config.SaveConfig(projectCfg); err != nil {
+			fmt.Printf("❌ Failed to update config: %v\n", err)
+			os.Exit(1)
+		}
+
 		fmt.Println(module)
 
 		fmt.Printf("\n✅ Successfully added %s!\n", serviceName)

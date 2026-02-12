@@ -28,6 +28,7 @@ func (l *LambdaService) GetConfig() (map[string]interface{}, error) {
 		Message: "Lambda function name:",
 	}, &functionName, survey.WithValidator(survey.Required))
 	config["function_name"] = functionName
+	config["instance_name"] = functionName
 
 	var runtime string
 	survey.AskOne(&survey.Select{
