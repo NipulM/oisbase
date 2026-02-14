@@ -87,33 +87,25 @@ func (p *ProjectConfig) AddServiceInstance(serviceName, instanceName string) err
 	return nil
 }
 
-func (p *ProjectConfig) AddAccess(
-	serviceName string,
-	instanceName string,
-	targetService string,
-	resourceName string,
-	permissions []string,
-) error {
+func (p *ProjectConfig) GetAllExistingServiceTypes() []string {
+    var types []string
+    for svcType := range p.Services {
+        types = append(types, svcType)
+    }
+    return types
+}
 
-	service, ok := p.Services[serviceName]
-	if !ok {
-		return fmt.Errorf("service %s not found", serviceName)
-	}
+func (p *ProjectConfig) GetServiceInstances(serviceType string) []string {
+    var instanceNames []string
 
-	instance, ok := service.Instances[instanceName]
-	if !ok {
-		return fmt.Errorf("instance %s not found", instanceName)
-	}
+    service, exists := p.Services[serviceType]
+    if !exists {
+        return instanceNames
+    }
 
-	if instance.Access == nil {
-		instance.Access = make(map[string]map[string][]string)
-	}
+    for name := range service.Instances {
+        instanceNames = append(instanceNames, name)
+    }
 
-	if instance.Access[targetService] == nil {
-		instance.Access[targetService] = make(map[string][]string)
-	}
-
-	instance.Access[targetService][resourceName] = permissions
-
-	return nil
+    return instanceNames
 }

@@ -11,6 +11,8 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/Masterminds/sprig/v3"
 
+	projectconfig "github.com/NipulM/oisbase/internal/config"
+	"github.com/NipulM/oisbase/internal/services/aws/registry"
 	"github.com/NipulM/oisbase/internal/services/aws/templates"
 )
 
@@ -44,6 +46,40 @@ func (l *LambdaService) GetConfig() (map[string]interface{}, error) {
 		Default: "index.handler",
 	}, &handler)
 	config["handler"] = handler
+
+	potentialTargets := registry.GetAvailableConnections("lambda")
+	
+	projectCfg, err := projectconfig.LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load project config: %w", err)
+	}
+	existingTypes := projectCfg.GetAllExistingServiceTypes()
+
+	// 3. Filter: Only keep potential targets that actually exist
+	var options []string
+	existingMap := make(map[string]bool)
+	for _, t := range existingTypes {
+		existingMap[t] = true
+	}
+
+	for _, p := range potentialTargets {
+		if existingMap[p] {
+			options = append(options, p)
+		}
+	}
+
+	// 4. Prompt the user
+	var selected []string
+	if len(options) == 0 {
+		fmt.Println("ℹ️ No compatible services found to connect to. Skipping permissions...")
+	} else {
+		survey.AskOne(&survey.MultiSelect{
+			Message: "Select existing resources to grant access to:",
+			Options: options,
+			Help:    "Only services already added to your project are shown here.",
+		}, &selected)
+	}
+	config["connections"] = selected
 
 	return config, nil
 }
