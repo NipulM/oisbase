@@ -54,8 +54,15 @@ var addCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Add the service instance to the project config
-		projectCfg.AddServiceInstance(serviceName, svcConfig["instance_name"].(string))
+		// Reload config in case GetConfig() saved changes (e.g., connections/access)
+		projectCfg, err = config.LoadConfig()
+		if err != nil {
+			fmt.Printf("❌ Failed to reload config: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Add the service instance if it wasn't already added during GetConfig()
+		_ = projectCfg.AddServiceInstance(serviceName, svcConfig["instance_name"].(string))
 
 		// Save the project config
 		if err := config.SaveConfig(projectCfg); err != nil {

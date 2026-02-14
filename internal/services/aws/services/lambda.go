@@ -11,6 +11,7 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/Masterminds/sprig/v3"
 
+	projectconfig "github.com/NipulM/oisbase/internal/config"
 	"github.com/NipulM/oisbase/internal/services/aws/registry"
 	"github.com/NipulM/oisbase/internal/services/aws/templates"
 )
@@ -46,15 +47,28 @@ func (l *LambdaService) GetConfig() (map[string]interface{}, error) {
 	}, &handler)
 	config["handler"] = handler
 
-	selected, err := registry.PromptForConnections("lambda")
+	// Load config and create the lambda instance BEFORE prompting for connections
+	projectCfg, err := projectconfig.LoadConfig()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load project config: %w", err)
 	}
-	config["connections"] = selected
+
+	// Create the lambda instance in config
+	err = projectCfg.AddServiceInstance("lambda", functionName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add lambda instance to config: %w", err)
+	}
+
+	// NOW prompt for connections - pass the config object directly
+	err = registry.PromptForConnections("lambda", functionName, projectCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to configure connections: %w", err)
+	}
+
+	// Config is already saved by PromptForConnections, no need to save again here
 
 	return config, nil
 }
-
 // environmentGroup returns "production" for prod, "pre-production" for everything else.
 func environmentGroup(env string) string {
 	if env == "prod" {

@@ -87,6 +87,44 @@ func (p *ProjectConfig) AddServiceInstance(serviceName, instanceName string) err
 	return nil
 }
 
+func (p *ProjectConfig) AddInstanceAccess(
+	serviceType string,
+	instanceName string,
+	targetServiceType string,
+	targetInstanceName string,
+	permissions []string,
+) error {
+	// Validate that the service and instance exist
+	service, exists := p.Services[serviceType]
+	if !exists {
+		return fmt.Errorf("service type %s does not exist", serviceType)
+	}
+
+	instance, exists := service.Instances[instanceName]
+	if !exists {
+		return fmt.Errorf("instance %s does not exist under service %s", instanceName, serviceType)
+	}
+
+	// Initialize Access map if it doesn't exist
+	if instance.Access == nil {
+		instance.Access = make(map[string]map[string][]string)
+	}
+
+	// Initialize target service type map if it doesn't exist
+	if instance.Access[targetServiceType] == nil {
+		instance.Access[targetServiceType] = make(map[string][]string)
+	}
+
+	// Add or update the permissions for the target instance
+	instance.Access[targetServiceType][targetInstanceName] = permissions
+
+	// Re-assign the instance back to the map (in case it was a copy)
+	service.Instances[instanceName] = instance
+	p.Services[serviceType] = service
+
+	return nil
+}
+
 func (p *ProjectConfig) GetAllExistingServiceTypes() []string {
     var types []string
     for svcType := range p.Services {
