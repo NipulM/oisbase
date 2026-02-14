@@ -48,3 +48,13 @@ func GetAvailableConnections(currentService string) []string {
     }
     return options
 }
+
+func GetPermissionTemplate(serviceA, serviceB string) (PermissionTemplate, bool) {
+    if tmpl, ok := PermissionRegistry[serviceA+"-to-"+serviceB]; ok {
+        return tmpl, true
+    }
+    if tmpl, ok := PermissionRegistry[serviceB+"-to-"+serviceA]; ok {
+        return tmpl, true
+    }
+    return PermissionTemplate{}, false
+}

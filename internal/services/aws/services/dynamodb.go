@@ -41,10 +41,8 @@ func (d *DynamoDBService) GenerateModule(config map[string]interface{}) (string,
 	var results []string
 
 	for _, environment := range environments {
-		group := environmentGroup(environment)
-
 		// Create service directory structure: environments/{group}/{env}/dynamodb/
-		serviceDir := filepath.Join("environments", group, environment, "dynamodb")
+		serviceDir := filepath.Join("environments", environment, "dynamodb")
 		if err := os.MkdirAll(serviceDir, 0755); err != nil {
 			return "", fmt.Errorf("failed to create dynamodb service directory: %w", err)
 		}
@@ -77,7 +75,7 @@ func (d *DynamoDBService) GenerateModule(config map[string]interface{}) (string,
 			return "", err
 		}
 
-		results = append(results, fmt.Sprintf("  ✓ [%s/%s] Created DynamoDB table: %s", group, environment, tableName))
+		results = append(results, fmt.Sprintf("  ✓ [%s] Created DynamoDB table: %s", environment, tableName))
 	}
 
 	return strings.Join(results, "\n"), nil	
