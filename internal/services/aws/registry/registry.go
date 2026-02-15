@@ -6,14 +6,28 @@ type PermissionTemplate struct {
 	Type                  string
 	SupportedAccessLevels []string
 	ActionMap             map[string][]string
-	ResourceSuffix        string
-	UpdateSide            string // "source" or "target" - which side of the relationship gets updated
+	UpdateSide            string
+	
+	DataTemplate          DataTemplateConfig
+	IAMTemplate           IAMTemplateConfig
+}
+
+type DataTemplateConfig struct {
+	TemplatePath    string // Path to the data.tf template
+	ParameterName   string // e.g., "{{ .instance_name }}_table_arn"
+	SSMPath         string // e.g., "/databases/{{ .instance_name }}/arn"
+}
+
+type IAMTemplateConfig struct {
+	TemplatePath    string   // Path to the IAM policy template
+	PolicyName      string   // e.g., "{{ .source_instance }}_{{ .target_service }}_policy"
+	ResourcePattern []string // e.g., ["data.aws_ssm_parameter.{{ .param_name }}.value", "...index/*"]
 }
 
 var PermissionRegistry = map[string]PermissionTemplate{
 	"lambda-to-dynamodb": {
 		Type:                  "Identity",
-		UpdateSide:            "source", // source (lambda) gets updated
+		UpdateSide:            "source",
 		SupportedAccessLevels: []string{"Read", "Write", "Delete", "All"},
 		ActionMap: map[string][]string{
 			"Read":   {"dynamodb:GetItem", "dynamodb:Scan", "dynamodb:Query"},
@@ -21,11 +35,22 @@ var PermissionRegistry = map[string]PermissionTemplate{
 			"Delete": {"dynamodb:DeleteItem"},
 			"All":    {"dynamodb:*"},
 		},
-		ResourceSuffix: "table-arn",
+		DataTemplate: DataTemplateConfig{
+			TemplatePath:  "common/data-ssm-parameter.tf.tmpl",
+			ParameterName: "{{ .target_instance }}_table_arn",
+			SSMPath:       "/databases/{{ .target_instance }}/arn",
+		},
+		IAMTemplate: IAMTemplateConfig{
+			TemplatePath: "common/iam-policy.tf.tmpl",
+			PolicyName:   "{{ .source_instance }}_dynamodb_policy",
+			ResourcePattern: []string{
+				"data.aws_ssm_parameter.{{ .param_name }}.value",
+			},
+		},
 	},
 	"lambda-to-s3": {
 		Type:                  "Identity",
-		UpdateSide:            "source", // source (lambda) gets updated
+		UpdateSide:            "source",
 		SupportedAccessLevels: []string{"Read", "Write", "Delete", "All"},
 		ActionMap: map[string][]string{
 			"Read":   {"s3:GetObject", "s3:ListBucket"},
@@ -33,7 +58,18 @@ var PermissionRegistry = map[string]PermissionTemplate{
 			"Delete": {"s3:DeleteObject"},
 			"All":    {"s3:*"},
 		},
-		ResourceSuffix: "bucket-arn",
+		DataTemplate: DataTemplateConfig{
+			TemplatePath:  "common/data-ssm-parameter.tf.tmpl",
+			ParameterName: "{{ .target_instance }}_bucket_arn",
+			SSMPath:       "/storage/{{ .target_instance }}/arn",
+		},
+		IAMTemplate: IAMTemplateConfig{
+			TemplatePath: "common/iam-policy.tf.tmpl",
+			PolicyName:   "{{ .source_instance }}_s3_policy",
+			ResourcePattern: []string{
+				"data.aws_ssm_parameter.{{ .param_name }}.value",
+			},
+		},
 	},
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/Masterminds/sprig/v3"
 	projectconfig "github.com/NipulM/oisbase/internal/config"
+	awsgenerator "github.com/NipulM/oisbase/internal/services/aws/generator"
 	"github.com/NipulM/oisbase/internal/services/aws/registry"
 	"github.com/NipulM/oisbase/internal/services/aws/templates"
 )
@@ -36,12 +37,12 @@ func (d *DynamoDBService) GetConfig() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to load project config: %w", err)
 	}
 
-	err = projectCfg.AddServiceInstance("dynamodb", tableName)
+	err = projectCfg.AddServiceInstance(d.Name(), tableName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add dynamodb instance to config: %w", err)
 	}
 
-	err = registry.PromptForConnections("dynamodb", tableName, projectCfg)
+	err = registry.PromptForConnections(d.Name(), tableName, projectCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to configure connections: %w", err)
 	}
@@ -58,8 +59,10 @@ func (d *DynamoDBService) GenerateModule(config map[string]interface{}) (string,
 	var results []string
 
 	for _, environment := range environments {
+		group := environmentGroup(environment)
+
 		// Create service directory structure: environments/{group}/{env}/dynamodb/
-		serviceDir := filepath.Join("environments", environment, "dynamodb")
+		serviceDir := filepath.Join("environments", group, environment, d.Name())
 		if err := os.MkdirAll(serviceDir, 0755); err != nil {
 			return "", fmt.Errorf("failed to create dynamodb service directory: %w", err)
 		}
@@ -92,7 +95,24 @@ func (d *DynamoDBService) GenerateModule(config map[string]interface{}) (string,
 			return "", err
 		}
 
-		results = append(results, fmt.Sprintf("  ✓ [%s] Created DynamoDB table: %s", environment, tableName))
+		projectCfg, err := projectconfig.LoadConfig()
+		if err != nil {
+			return "", fmt.Errorf("failed to load config for IAM generation: %w", err)
+		}
+
+		iamGen := awsgenerator.NewIAMPolicyGenerator(projectCfg)
+		if err := iamGen.GenerateIAMPolicies(
+			d.Name(),
+			tableName,
+			environment,
+			instanceDir,
+		); err != nil {
+			return "", fmt.Errorf("failed to generate IAM policies: %w", err)
+		}
+
+		results = append(results, fmt.Sprintf("  ✓ [%s/%s] Created DynamoDB table: %s", group, environment, tableName))
+
+		results = append(results, fmt.Sprintf("  ✓ [%s/%s] Created DynamoDB table: %s", group, environment, tableName))
 	}
 
 	return strings.Join(results, "\n"), nil	

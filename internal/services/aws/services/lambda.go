@@ -12,6 +12,7 @@ import (
 	"github.com/Masterminds/sprig/v3"
 
 	projectconfig "github.com/NipulM/oisbase/internal/config"
+	awsgenerator "github.com/NipulM/oisbase/internal/services/aws/generator"
 	"github.com/NipulM/oisbase/internal/services/aws/registry"
 	"github.com/NipulM/oisbase/internal/services/aws/templates"
 )
@@ -54,18 +55,22 @@ func (l *LambdaService) GetConfig() (map[string]interface{}, error) {
 	}
 
 	// Create the lambda instance in config
-	err = projectCfg.AddServiceInstance("lambda", functionName)
+	err = projectCfg.AddServiceInstance(l.Name(), functionName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add lambda instance to config: %w", err)
 	}
 
+	// Save immediately after adding instance
+	err = projectconfig.SaveConfig(projectCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save config after adding instance: %w", err)
+	}
+
 	// NOW prompt for connections - pass the config object directly
-	err = registry.PromptForConnections("lambda", functionName, projectCfg)
+	err = registry.PromptForConnections(l.Name(), functionName, projectCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to configure connections: %w", err)
 	}
-
-	// Config is already saved by PromptForConnections, no need to save again here
 
 	return config, nil
 }
@@ -89,7 +94,7 @@ func (l *LambdaService) GenerateModule(config map[string]interface{}) (string, e
 		group := environmentGroup(environment)
 
 		// Create service directory structure: environments/{group}/{env}/lambda/
-		serviceDir := filepath.Join("environments", group, environment, "lambda")
+		serviceDir := filepath.Join("environments", group, environment, l.Name())
 		if err := os.MkdirAll(serviceDir, 0755); err != nil {
 			return "", fmt.Errorf("failed to create lambda service directory: %w", err)
 		}
@@ -120,6 +125,21 @@ func (l *LambdaService) GenerateModule(config map[string]interface{}) (string, e
 		// Generate template files in the instance directory
 		if err := l.generateInstanceFiles(instanceDir, envConfig); err != nil {
 			return "", err
+		}
+
+		projectCfg, err := projectconfig.LoadConfig()
+		if err != nil {
+			return "", fmt.Errorf("failed to load config for IAM generation: %w", err)
+		}
+
+		iamGen := awsgenerator.NewIAMPolicyGenerator(projectCfg)
+		if err := iamGen.GenerateIAMPolicies(
+			l.Name(),
+			functionName,
+			environment,
+			instanceDir,
+		); err != nil {
+			return "", fmt.Errorf("failed to generate IAM policies: %w", err)
 		}
 
 		results = append(results, fmt.Sprintf("  ✓ [%s/%s] Created Lambda function: %s", group, environment, functionName))
