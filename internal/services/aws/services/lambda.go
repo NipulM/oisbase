@@ -2,7 +2,6 @@ package aws
 
 import (
 	"bytes"
-	"embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,10 +10,12 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/Masterminds/sprig/v3"
-)
 
-//go:embed template/*.tmpl
-var templateFS embed.FS
+	projectconfig "github.com/NipulM/oisbase/internal/config"
+	awsgenerator "github.com/NipulM/oisbase/internal/services/aws/generator"
+	"github.com/NipulM/oisbase/internal/services/aws/registry"
+	"github.com/NipulM/oisbase/internal/services/aws/templates"
+)
 
 type LambdaService struct{}
 
@@ -30,6 +31,7 @@ func (l *LambdaService) GetConfig() (map[string]interface{}, error) {
 		Message: "Lambda function name:",
 	}, &functionName, survey.WithValidator(survey.Required))
 	config["function_name"] = functionName
+	config["instance_name"] = functionName
 
 	var runtime string
 	survey.AskOne(&survey.Select{
@@ -46,9 +48,36 @@ func (l *LambdaService) GetConfig() (map[string]interface{}, error) {
 	}, &handler)
 	config["handler"] = handler
 
+	// Load config and create the lambda instance BEFORE prompting for connections
+	projectCfg, err := projectconfig.LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load project config: %w", err)
+	}
+
+	// Create the lambda instance in config
+	err = projectCfg.AddServiceInstance(l.Name(), functionName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add lambda instance to config: %w", err)
+	}
+
+	// Save immediately after adding instance
+	err = projectconfig.SaveConfig(projectCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save config after adding instance: %w", err)
+	}
+
+	// NOW prompt for connections - pass the config object directly
+	affected, err := registry.PromptForConnections(l.Name(), functionName, projectCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to configure connections: %w", err)
+	}
+
+	if len(affected) > 0 {
+		config["affected_instances"] = affected
+	}
+
 	return config, nil
 }
-
 // environmentGroup returns "production" for prod, "pre-production" for everything else.
 func environmentGroup(env string) string {
 	if env == "prod" {
@@ -69,7 +98,7 @@ func (l *LambdaService) GenerateModule(config map[string]interface{}) (string, e
 		group := environmentGroup(environment)
 
 		// Create service directory structure: environments/{group}/{env}/lambda/
-		serviceDir := filepath.Join("environments", group, environment, "lambda")
+		serviceDir := filepath.Join("environments", group, environment, l.Name())
 		if err := os.MkdirAll(serviceDir, 0755); err != nil {
 			return "", fmt.Errorf("failed to create lambda service directory: %w", err)
 		}
@@ -100,6 +129,21 @@ func (l *LambdaService) GenerateModule(config map[string]interface{}) (string, e
 		// Generate template files in the instance directory
 		if err := l.generateInstanceFiles(instanceDir, envConfig); err != nil {
 			return "", err
+		}
+
+		projectCfg, err := projectconfig.LoadConfig()
+		if err != nil {
+			return "", fmt.Errorf("failed to load config for IAM generation: %w", err)
+		}
+
+		iamGen := awsgenerator.NewIAMPolicyGenerator(projectCfg)
+		if err := iamGen.GenerateIAMPolicies(
+			l.Name(),
+			functionName,
+			environment,
+			instanceDir,
+		); err != nil {
+			return "", fmt.Errorf("failed to generate IAM policies: %w", err)
 		}
 
 		results = append(results, fmt.Sprintf("  ✓ [%s/%s] Created Lambda function: %s", group, environment, functionName))
@@ -166,7 +210,7 @@ func (l *LambdaService) createOrUpdateMainTf(serviceDir, region, functionName st
 }
 
 func (l *LambdaService) generateInstanceFiles(instanceDir string, config map[string]interface{}) error {
-	tmpl, err := template.New("").Funcs(sprig.TxtFuncMap()).ParseFS(templateFS, "template/*.tmpl")
+	tmpl, err := template.New("").Funcs(sprig.TxtFuncMap()).ParseFS(templates.LambdaFS, "lambda/*.tmpl")
 	if err != nil {
 		return err
 	}

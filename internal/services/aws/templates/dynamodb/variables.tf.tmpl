@@ -1,0 +1,19 @@
+variable "aws_region" {
+  type    = string
+  default = "{{ .region }}"
+}
+
+variable "environment" {
+  type    = string
+  default = "{{ .environment }}"
+}
+
+variable "app_name" {
+  type    = string
+  default = "{{ .project_name }}"
+}
+
+variable "table_name" {
+  type    = string
+  default = "{{ .table_name }}"
+}

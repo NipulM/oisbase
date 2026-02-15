@@ -8,6 +8,7 @@ import (
 	"github.com/NipulM/oisbase/internal/config"
 	"github.com/NipulM/oisbase/internal/generator"
 	"github.com/NipulM/oisbase/internal/prompts"
+	awsmodulegenerator "github.com/NipulM/oisbase/internal/services/aws/generator"
 	"github.com/spf13/cobra"
 )
 
@@ -16,8 +17,6 @@ var initCmd = &cobra.Command{
 	Short: "Initialize a new Terraform project",
 	Long:  `Interactively configure and generate a new Terraform project with AWS modules.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("🚀 Let's create your Terraform project!\n")
-
 		promptConfig, err := prompts.GetProjectConfig()
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
@@ -45,7 +44,7 @@ var initCmd = &cobra.Command{
 		}
 
 		// Copy modules
-		generator.CopyModules(promptConfig)
+		awsmodulegenerator.CopyModules(promptConfig)
 		if err != nil {
 			fmt.Printf("Error copying modules: %v\n", err)
 			return
