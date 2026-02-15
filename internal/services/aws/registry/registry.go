@@ -15,6 +15,7 @@ type AffectedInstance struct {
 // (re)generated for that side.
 type ServiceTemplateConfig struct {
 	Category     string           // SSM path category, e.g. "databases", "compute"
+	NameVar      string           // Terraform variable for instance naming, e.g. "lambda_name", "table_name"
 	DataTemplate *DataTemplateConfig
 	IAMTemplate  *IAMTemplateConfig
 }
@@ -31,9 +32,7 @@ type DataTemplateConfig struct {
 }
 
 type IAMTemplateConfig struct {
-	TemplatePath    string   // Path to the IAM policy template
-	PolicyName      string   // e.g., "{{ .source_instance }}_{{ .target_service }}_policy"
-	ResourcePattern []string // e.g., ["data.aws_ssm_parameter.{{ .param_name }}.value"]
+	TemplatePath string // Path to the IAM policy template
 }
 
 type PermissionTemplate struct {
@@ -59,6 +58,7 @@ var PermissionRegistry = map[string]PermissionTemplate{
 		},
 		Source: ServiceTemplateConfig{
 			Category: "compute",
+			NameVar:  "lambda_name",
 			DataTemplate: &DataTemplateConfig{
 				TemplatePath:  "common/data-ssm-parameter.tf.tmpl",
 				ParameterName: "{{ .target_instance }}_table_arn",
@@ -66,14 +66,11 @@ var PermissionRegistry = map[string]PermissionTemplate{
 			},
 			IAMTemplate: &IAMTemplateConfig{
 				TemplatePath: "common/iam-policy.tf.tmpl",
-				PolicyName:   "{{ .source_instance }}_dynamodb_policy",
-				ResourcePattern: []string{
-					"data.aws_ssm_parameter.{{ .param_name }}.value",
-				},
 			},
 		},
 		Target: ServiceTemplateConfig{
 			Category: "databases",
+			NameVar:  "table_name",
 		},
 	},
 	"lambda-to-s3": {
@@ -87,6 +84,7 @@ var PermissionRegistry = map[string]PermissionTemplate{
 		},
 		Source: ServiceTemplateConfig{
 			Category: "compute",
+			NameVar:  "lambda_name",
 			DataTemplate: &DataTemplateConfig{
 				TemplatePath:  "common/data-ssm-parameter.tf.tmpl",
 				ParameterName: "{{ .target_instance }}_bucket_arn",
@@ -94,15 +92,11 @@ var PermissionRegistry = map[string]PermissionTemplate{
 			},
 			IAMTemplate: &IAMTemplateConfig{
 				TemplatePath: "common/iam-policy.tf.tmpl",
-				PolicyName:   "{{ .source_instance }}_s3_policy",
-				ResourcePattern: []string{
-					"data.aws_ssm_parameter.{{ .param_name }}.value",
-				},
 			},
 		},
 		Target: ServiceTemplateConfig{
 			Category: "storage",
-			// S3 doesn't need any TF files generated on its side
+			NameVar:  "bucket_name",
 		},
 	},
 }

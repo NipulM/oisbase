@@ -210,6 +210,7 @@ func (g *IAMPolicyGenerator) generateIAMPolicy(
 
 	// Load template
 	tmpl, err := template.New("").Funcs(sprig.TxtFuncMap()).Funcs(template.FuncMap{
+		// toJson quotes values — use for Action strings like "dynamodb:GetItem"
 		"toJson": func(v interface{}) string {
 			switch val := v.(type) {
 			case []string:
@@ -225,19 +226,51 @@ func (g *IAMPolicyGenerator) generateIAMPolicy(
 				return ""
 			}
 		},
+		// toRef outputs bare references — use for Terraform expressions like data.aws_ssm_parameter.x.value
+		"toRef": func(v interface{}) string {
+			switch val := v.(type) {
+			case []string:
+				if len(val) == 1 {
+					return val[0]
+				}
+				return "[" + strings.Join(val, ", ") + "]"
+			default:
+				return ""
+			}
+		},
 	}).ParseFS(templates.CommonFS, "common/iam-policy.tf.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to parse IAM template: %w", err)
 	}
 
-	policyName := fmt.Sprintf("%s_access_policy", instanceName)
+	targetLabel := "access"
+	nameVar := serviceType + "_name" // fallback convention
+	if len(groups) > 0 {
+		first := groups[0].TargetService
+		allSame := true
+		for _, g := range groups[1:] {
+			if g.TargetService != first {
+				allSame = false
+				break
+			}
+		}
+		if allSame {
+			targetLabel = first
+			if myTemplates, _, ok := registry.GetTemplatesForService(serviceType, first); ok && myTemplates.NameVar != "" {
+				nameVar = myTemplates.NameVar
+			}
+		}
+	}
+	policyName := fmt.Sprintf("%s_%s_policy", serviceType, targetLabel)
+
 	roleName := fmt.Sprintf("%s_role", serviceType)
 
 	var buf bytes.Buffer
 	err = tmpl.ExecuteTemplate(&buf, "iam-policy.tf.tmpl", map[string]interface{}{
 		"policy_name":     policyName,
 		"source_instance": instanceName,
-		"target_service":  "multiple",
+		"target_label":    targetLabel,
+		"name_var":        nameVar,
 		"role_name":       roleName,
 		"statements":      statements,
 	})

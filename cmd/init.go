@@ -17,8 +17,6 @@ var initCmd = &cobra.Command{
 	Short: "Initialize a new Terraform project",
 	Long:  `Interactively configure and generate a new Terraform project with AWS modules.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("🚀 Let's create your Terraform project!\n")
-
 		promptConfig, err := prompts.GetProjectConfig()
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
