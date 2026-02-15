@@ -22,10 +22,6 @@ func (d *DynamoDBService) Name() string {
 	return "dynamodb"
 }
 
-func (d *DynamoDBService) GetServiceCategory() string {
-	return "databases"
-}
-
 func (d *DynamoDBService) GetConfig() (map[string]interface{}, error) {
 	config := make(map[string]interface{})
 

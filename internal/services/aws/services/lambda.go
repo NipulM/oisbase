@@ -23,10 +23,6 @@ func (l *LambdaService) Name() string {
 	return "lambda"
 }
 
-func (l *LambdaService) GetServiceCategory() string {
-	return "services"
-}
-
 func (l *LambdaService) GetConfig() (map[string]interface{}, error) {
 	config := make(map[string]interface{})
 
