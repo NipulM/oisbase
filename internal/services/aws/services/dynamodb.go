@@ -2,7 +2,6 @@ package aws
 
 import (
 	"bytes"
-	"embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,83 +10,74 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/Masterminds/sprig/v3"
+	projectconfig "github.com/NipulM/oisbase/internal/config"
+	"github.com/NipulM/oisbase/internal/services/aws/registry"
+	"github.com/NipulM/oisbase/internal/services/aws/templates"
 )
 
-//go:embed template/*.tmpl
-var templateFS embed.FS
+type DynamoDBService struct{}
 
-type LambdaService struct{}
-
-func (l *LambdaService) Name() string {
-	return "lambda"
+func (d *DynamoDBService) Name() string {
+	return "dynamodb"
 }
 
-func (l *LambdaService) GetConfig() (map[string]interface{}, error) {
+func (d *DynamoDBService) GetConfig() (map[string]interface{}, error) {
 	config := make(map[string]interface{})
 
-	var functionName string
+	var tableName string
 	survey.AskOne(&survey.Input{
-		Message: "Lambda function name:",
-	}, &functionName, survey.WithValidator(survey.Required))
-	config["function_name"] = functionName
+		Message: "DynamoDB table name:",
+	}, &tableName, survey.WithValidator(survey.Required))
+	config["table_name"] = tableName
+	config["instance_name"] = tableName
 
-	var runtime string
-	survey.AskOne(&survey.Select{
-		Message: "Runtime:",
-		Default: "nodejs20.x",
-		Options: []string{"python3.9", "python3.11", "nodejs20.x"},
-	}, &runtime)
-	config["runtime"] = runtime
+	projectCfg, err := projectconfig.LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load project config: %w", err)
+	}
 
-	var handler string
-	survey.AskOne(&survey.Input{
-		Message: "Handler (e.g., index.handler):",
-		Default: "index.handler",
-	}, &handler)
-	config["handler"] = handler
+	err = projectCfg.AddServiceInstance("dynamodb", tableName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add dynamodb instance to config: %w", err)
+	}
+
+	err = registry.PromptForConnections("dynamodb", tableName, projectCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to configure connections: %w", err)
+	}
 
 	return config, nil
 }
 
-// environmentGroup returns "production" for prod, "pre-production" for everything else.
-func environmentGroup(env string) string {
-	if env == "prod" {
-		return "production"
-	}
-	return "pre-production"
-}
-
-func (l *LambdaService) GenerateModule(config map[string]interface{}) (string, error) {
+func (d *DynamoDBService) GenerateModule(config map[string]interface{}) (string, error) {
 	environments := config["environments"].([]string)
-	functionName := config["function_name"].(string)
+	tableName := config["table_name"].(string)
 	projectName := config["project_name"].(string)
 	region := config["region"].(string)
 
 	var results []string
 
 	for _, environment := range environments {
-		group := environmentGroup(environment)
-
-		// Create service directory structure: environments/{group}/{env}/lambda/
-		serviceDir := filepath.Join("environments", group, environment, "lambda")
+		// Create service directory structure: environments/{group}/{env}/dynamodb/
+		serviceDir := filepath.Join("environments", environment, "dynamodb")
 		if err := os.MkdirAll(serviceDir, 0755); err != nil {
-			return "", fmt.Errorf("failed to create lambda service directory: %w", err)
+			return "", fmt.Errorf("failed to create dynamodb service directory: %w", err)
 		}
 
 		// Create backend.tf if it doesn't exist
-		if err := l.createBackendTf(serviceDir, projectName, environment, region); err != nil {
+		if err := d.createBackendTf(serviceDir, projectName, environment, region); err != nil {
 			return "", err
 		}
 
 		// Create or update main.tf
-		if err := l.createOrUpdateMainTf(serviceDir, region, functionName); err != nil {
+		if err := d.createOrUpdateMainTf(serviceDir, region, tableName); err != nil {
 			return "", err
 		}
 
-		// Create function instance directory: environments/{group}/{env}/lambda/{function-name}/
-		instanceDir := filepath.Join(serviceDir, functionName)
+		// Create table instance directory: environments/{group}/{env}/dynamodb/{table-name}/
+		instanceDir := filepath.Join(serviceDir, tableName)
 		if err := os.MkdirAll(instanceDir, 0755); err != nil {
-			return "", fmt.Errorf("failed to create function instance directory: %w", err)
+			return "", fmt.Errorf("failed to create table instance directory: %w", err)
 		}
 
 		// Pass environment into config for template rendering
@@ -98,17 +88,17 @@ func (l *LambdaService) GenerateModule(config map[string]interface{}) (string, e
 		envConfig["environment"] = environment
 
 		// Generate template files in the instance directory
-		if err := l.generateInstanceFiles(instanceDir, envConfig); err != nil {
+		if err := d.generateInstanceFiles(instanceDir, envConfig); err != nil {
 			return "", err
 		}
 
-		results = append(results, fmt.Sprintf("  ✓ [%s/%s] Created Lambda function: %s", group, environment, functionName))
+		results = append(results, fmt.Sprintf("  ✓ [%s] Created DynamoDB table: %s", environment, tableName))
 	}
 
-	return strings.Join(results, "\n"), nil
+	return strings.Join(results, "\n"), nil	
 }
 
-func (l *LambdaService) createBackendTf(serviceDir, projectName, environment, region string) error {
+func (d *DynamoDBService) createBackendTf(serviceDir, projectName, environment, region string) error {
 	backendPath := filepath.Join(serviceDir, "backend.tf")
 
 	// Don't overwrite if it exists
@@ -119,7 +109,7 @@ func (l *LambdaService) createBackendTf(serviceDir, projectName, environment, re
 	backendContent := fmt.Sprintf(`terraform {
   backend "s3" {
     bucket         = "%s-terraform-states-bucket-%s"
-    key            = "%s/lambda/terraform.tfstate"
+    key            = "%s/dynamodb/terraform.tfstate"
     region         = "%s"
     dynamodb_table = "%s-terraform-lock-table-%s"
     encrypt        = true
@@ -130,7 +120,7 @@ func (l *LambdaService) createBackendTf(serviceDir, projectName, environment, re
 	return os.WriteFile(backendPath, []byte(backendContent), 0644)
 }
 
-func (l *LambdaService) createOrUpdateMainTf(serviceDir, region, functionName string) error {
+func (d *DynamoDBService) createOrUpdateMainTf(serviceDir, region, tableName string) error {
 	mainTfPath := filepath.Join(serviceDir, "main.tf")
 
 	// Read existing content if file exists
@@ -147,12 +137,12 @@ func (l *LambdaService) createOrUpdateMainTf(serviceDir, region, functionName st
 	}
 
 	// Check if module already exists (avoid duplicates)
-	moduleName := strings.ReplaceAll(functionName, "-", "_")
+	moduleName := strings.ReplaceAll(tableName, "-", "_")
 	moduleBlock := fmt.Sprintf(`module "%s" {
   source = "./%s"
 }
 
-`, moduleName, functionName)
+`, moduleName, tableName)
 
 	if strings.Contains(existingContent, fmt.Sprintf(`module "%s"`, moduleName)) {
 		// Module already exists, don't duplicate
@@ -165,18 +155,15 @@ func (l *LambdaService) createOrUpdateMainTf(serviceDir, region, functionName st
 	return os.WriteFile(mainTfPath, []byte(newContent), 0644)
 }
 
-func (l *LambdaService) generateInstanceFiles(instanceDir string, config map[string]interface{}) error {
-	tmpl, err := template.New("").Funcs(sprig.TxtFuncMap()).ParseFS(templateFS, "template/*.tmpl")
+func (d *DynamoDBService) generateInstanceFiles(instanceDir string, config map[string]interface{}) error {
+	tmpl, err := template.New("").Funcs(sprig.TxtFuncMap()).ParseFS(templates.DynamoDBFS, "dynamodb/*.tmpl")
 	if err != nil {
 		return err
 	}
 
 	templateFiles := map[string]string{
-		"lambda.tf.tmpl":    "lambda.tf",
+		"dynamodb.tf.tmpl":  "dynamodb.tf",
 		"variables.tf.tmpl": "variables.tf",
-		"outputs.tf.tmpl":   "outputs.tf",
-		"iam.tf.tmpl":       "iam.tf",
-		"data.tf.tmpl":      "data.tf",
 	}
 
 	for tmplName, fileName := range templateFiles {
