@@ -10,6 +10,8 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/Masterminds/sprig/v3"
+	projectconfig "github.com/NipulM/oisbase/internal/config"
+	"github.com/NipulM/oisbase/internal/services/aws/registry"
 	"github.com/NipulM/oisbase/internal/services/aws/templates"
 )
 
@@ -28,6 +30,21 @@ func (d *DynamoDBService) GetConfig() (map[string]interface{}, error) {
 	}, &tableName, survey.WithValidator(survey.Required))
 	config["table_name"] = tableName
 	config["instance_name"] = tableName
+
+	projectCfg, err := projectconfig.LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load project config: %w", err)
+	}
+
+	err = projectCfg.AddServiceInstance("dynamodb", tableName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add dynamodb instance to config: %w", err)
+	}
+
+	err = registry.PromptForConnections("dynamodb", tableName, projectCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to configure connections: %w", err)
+	}
 
 	return config, nil
 }

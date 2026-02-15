@@ -11,9 +11,6 @@ func PromptForConnections(serviceName, instanceName string, projectCfg *projectc
 	// 1. Get potential targets from registry (e.g., ["dynamodb", "s3"])
 	potentialTargets := GetAvailableConnections(serviceName)
 
-	// REMOVED: Don't load config here, use the one passed in
-	// projectCfg, err := projectconfig.LoadConfig()
-
 	// 2. Filter options: Must be a potential target AND have at least 1 instance
 	var validOptions []string
 	for _, targetType := range potentialTargets {
@@ -74,16 +71,22 @@ func PromptForConnections(serviceName, instanceName string, projectCfg *projectc
 			}
 		}
 
-		// Get instances of the target service type
-		targetInstances := projectCfg.GetServiceInstances(targetServiceType)
-
+		// Determine which instances are the target
 		var selectedInstances []string
-		err = survey.AskOne(&survey.MultiSelect{
-			Message: fmt.Sprintf("Which %s instances should be accessible?", targetServiceType),
-			Options: targetInstances,
-		}, &selectedInstances)
-		if err != nil {
-			return err
+		if targetServiceType == serviceName {
+			// Target is the current service being created - use the instance we're creating
+			selectedInstances = []string{instanceName}
+		} else {
+			// Target is a different service - ask which instances
+			targetInstances := projectCfg.GetServiceInstances(targetServiceType)
+
+			err = survey.AskOne(&survey.MultiSelect{
+				Message: fmt.Sprintf("Which %s instances should be accessible?", targetServiceType),
+				Options: targetInstances,
+			}, &selectedInstances)
+			if err != nil {
+				return err
+			}
 		}
 
 		// For each selected instance, ask for permissions
@@ -108,10 +111,10 @@ func PromptForConnections(serviceName, instanceName string, projectCfg *projectc
 			// Save to config
 			err = projectCfg.AddInstanceAccess(
 				serviceTypeToUpdate,
-				instanceToUpdate,   
-				targetServiceType,  
-				targetInstanceName, 
-				expandedPerms,      
+				instanceToUpdate,
+				targetServiceType,
+				targetInstanceName,
+				expandedPerms,
 			)
 
 			if err != nil {
