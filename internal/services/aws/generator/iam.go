@@ -14,6 +14,14 @@ import (
 	"github.com/NipulM/oisbase/internal/services/aws/templates"
 )
 
+// environmentGroup maps an environment name to its directory group.
+func environmentGroup(env string) string {
+	if env == "prod" {
+		return "production"
+	}
+	return "pre-production"
+}
+
 type IAMPolicyGenerator struct {
 	config *config.ProjectConfig
 }
@@ -27,6 +35,25 @@ type StatementGroup struct {
 
 func NewIAMPolicyGenerator(cfg *config.ProjectConfig) *IAMPolicyGenerator {
 	return &IAMPolicyGenerator{config: cfg}
+}
+
+// UpdateAffectedInstances regenerates IAM/data.tf files for service instances
+// that were modified as a side-effect of creating a different service.
+func (g *IAMPolicyGenerator) UpdateAffectedInstances(
+	affected []registry.AffectedInstance,
+	environments []string,
+) error {
+	for _, env := range environments {
+		group := environmentGroup(env)
+		for _, inst := range affected {
+			instanceDir := filepath.Join("environments", group, env, inst.ServiceType, inst.InstanceName)
+			if err := g.GenerateIAMPolicies(inst.ServiceType, inst.InstanceName, env, instanceDir); err != nil {
+				return fmt.Errorf("failed to update IAM for %s/%s in %s: %w",
+					inst.ServiceType, inst.InstanceName, env, err)
+			}
+		}
+	}
+	return nil
 }
 
 // GenerateIAMPolicies generates IAM policies for a specific instance
@@ -54,7 +81,7 @@ func (g *IAMPolicyGenerator) GenerateIAMPolicies(
 	var groups []StatementGroup
 
 	// Iterate through all access definitions
-		for targetService, instances := range instance.Access {
+	for targetService, instances := range instance.Access {
 		for targetInstance, permissions := range instances {
 			groups = append(groups, StatementGroup{
 				TargetService:  targetService,
@@ -103,22 +130,22 @@ func (g *IAMPolicyGenerator) generateDataTf(
 	var newEntries strings.Builder
 
 	for _, group := range groups {
-		// Skip if no permission template exists for this service pair
-		permissionTemplate, ok := registry.GetPermissionTemplate(serviceType, group.TargetService)
-		if !ok {
+		// Use GetTemplatesForService to get the templates for this service
+		// and the other side's category (for SSM path)
+		myTemplates, otherCategory, ok := registry.GetTemplatesForService(serviceType, group.TargetService)
+		if !ok || myTemplates.DataTemplate == nil {
 			continue
 		}
 
 		paramName := fmt.Sprintf("%s_%s_arn", group.TargetInstance, group.TargetService)
-		
+
 		// Check if this parameter already exists
 		if strings.Contains(existingContent, fmt.Sprintf(`"%s"`, paramName)) {
 			continue
 		}
 
-		// Generate SSM path based on target service
-		ssmPath := fmt.Sprintf("/%s/%s/arn", permissionTemplate.TargetServiceCategory, group.TargetInstance)
-
+		// Generate SSM path using the other side's category
+		ssmPath := fmt.Sprintf("/%s/%s/arn", otherCategory, group.TargetInstance)
 
 		var buf bytes.Buffer
 		err = tmpl.ExecuteTemplate(&buf, "data-ssm-parameter.tf.tmpl", map[string]string{
@@ -169,7 +196,7 @@ func (g *IAMPolicyGenerator) generateIAMPolicy(
 	var statements []PolicyStatement
 	for i, group := range groups {
 		paramName := fmt.Sprintf("%s_%s_arn", group.TargetInstance, group.TargetService)
-		
+
 		stmt := PolicyStatement{
 			Actions: group.Actions,
 			Resources: []string{

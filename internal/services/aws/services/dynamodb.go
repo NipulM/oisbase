@@ -42,9 +42,13 @@ func (d *DynamoDBService) GetConfig() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to add dynamodb instance to config: %w", err)
 	}
 
-	err = registry.PromptForConnections(d.Name(), tableName, projectCfg)
+	affected, err := registry.PromptForConnections(d.Name(), tableName, projectCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to configure connections: %w", err)
+	}
+
+	if len(affected) > 0 {
+		config["affected_instances"] = affected
 	}
 
 	return config, nil

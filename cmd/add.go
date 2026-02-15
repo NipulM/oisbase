@@ -6,6 +6,8 @@ import (
 
 	"github.com/NipulM/oisbase/internal/config"
 	"github.com/NipulM/oisbase/internal/services"
+	awsgenerator "github.com/NipulM/oisbase/internal/services/aws/generator"
+	"github.com/NipulM/oisbase/internal/services/aws/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -52,6 +54,20 @@ var addCmd = &cobra.Command{
 		if err != nil {
 			fmt.Printf("❌ Error generating module: %v\n", err)
 			os.Exit(1)
+		}
+
+		// Regenerate TF files for any cross-service dependencies
+		if affected, ok := svcConfig["affected_instances"].([]registry.AffectedInstance); ok && len(affected) > 0 {
+			projectCfg, err = config.LoadConfig()
+			if err != nil {
+				fmt.Printf("❌ Failed to reload config for cross-service update: %v\n", err)
+				os.Exit(1)
+			}
+			iamGen := awsgenerator.NewIAMPolicyGenerator(projectCfg)
+			if err := iamGen.UpdateAffectedInstances(affected, projectCfg.Environments); err != nil {
+				fmt.Printf("❌ Failed to update cross-service IAM policies: %v\n", err)
+				os.Exit(1)
+			}
 		}
 
 		// Reload config in case GetConfig() saved changes (e.g., connections/access)

@@ -67,9 +67,13 @@ func (l *LambdaService) GetConfig() (map[string]interface{}, error) {
 	}
 
 	// NOW prompt for connections - pass the config object directly
-	err = registry.PromptForConnections(l.Name(), functionName, projectCfg)
+	affected, err := registry.PromptForConnections(l.Name(), functionName, projectCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to configure connections: %w", err)
+	}
+
+	if len(affected) > 0 {
+		config["affected_instances"] = affected
 	}
 
 	return config, nil
