@@ -50,76 +50,86 @@ func PromptForConnections(serviceName, instanceName string, projectCfg *projectc
 			return fmt.Errorf("could not determine update direction for %s <-> %s", serviceName, targetType)
 		}
 
-		// Determine which instance gets updated
-		var instanceToUpdate string
+		// Determine which instances get updated
+		var instancesToUpdate []string
 		if serviceTypeToUpdate == serviceName {
 			// Current service gets updated, use the instance we're creating
-			instanceToUpdate = instanceName
+			instancesToUpdate = []string{instanceName}
 		} else {
-			// The OTHER service gets updated, need to ask which instance
+			// The OTHER service gets updated, need to ask which instances
 			otherInstances := projectCfg.GetServiceInstances(serviceTypeToUpdate)
 			if len(otherInstances) == 0 {
 				return fmt.Errorf("no instances found for %s to update", serviceTypeToUpdate)
 			}
 
-			err = survey.AskOne(&survey.Select{
-				Message: fmt.Sprintf("Which %s instance should get access?", serviceTypeToUpdate),
+			err = survey.AskOne(&survey.MultiSelect{
+				Message: fmt.Sprintf("Which %s instances should get access?", serviceTypeToUpdate),
 				Options: otherInstances,
-			}, &instanceToUpdate)
+			}, &instancesToUpdate)
 			if err != nil {
 				return err
 			}
 		}
 
-		// Determine which instances are the target
-		var selectedInstances []string
-		if targetServiceType == serviceName {
-			// Target is the current service being created - use the instance we're creating
-			selectedInstances = []string{instanceName}
-		} else {
-			// Target is a different service - ask which instances
-			targetInstances := projectCfg.GetServiceInstances(targetServiceType)
+		// Loop through all instances to update
+		for _, instanceToUpdate := range instancesToUpdate {
+			// Determine which instances are the target
+			var selectedInstances []string
+			if targetServiceType == serviceName {
+				// Target is the current service being created - use the instance we're creating
+				selectedInstances = []string{instanceName}
+			} else {
+				// Target is a different service - ask which instances
+				targetInstances := projectCfg.GetServiceInstances(targetServiceType)
 
-			err = survey.AskOne(&survey.MultiSelect{
-				Message: fmt.Sprintf("Which %s instances should be accessible?", targetServiceType),
-				Options: targetInstances,
-			}, &selectedInstances)
-			if err != nil {
-				return err
-			}
-		}
-
-		// For each selected instance, ask for permissions
-		for _, targetInstanceName := range selectedInstances {
-			var chosenPerms []string
-			err = survey.AskOne(&survey.MultiSelect{
-				Message: fmt.Sprintf("Access level for %s (%s):", targetInstanceName, targetServiceType),
-				Options: permTemplate.SupportedAccessLevels,
-			}, &chosenPerms)
-			if err != nil {
-				return err
-			}
-
-			// Expand permissions based on ActionMap
-			var expandedPerms []string
-			for _, level := range chosenPerms {
-				if actions, ok := permTemplate.ActionMap[level]; ok {
-					expandedPerms = append(expandedPerms, actions...)
+				err = survey.AskOne(&survey.MultiSelect{
+					Message: fmt.Sprintf("Which %s instances should be accessible?", targetServiceType),
+					Options: targetInstances,
+				}, &selectedInstances)
+				if err != nil {
+					return err
 				}
 			}
 
-			// Save to config
-			err = projectCfg.AddInstanceAccess(
-				serviceTypeToUpdate,
-				instanceToUpdate,
-				targetServiceType,
-				targetInstanceName,
-				expandedPerms,
-			)
+			// For each selected instance, ask for permissions
+			for _, targetInstanceName := range selectedInstances {
+				var chosenPerms []string
+				err = survey.AskOne(&survey.MultiSelect{
+					Message: fmt.Sprintf("Access level for %s (%s) → %s:", targetInstanceName, targetServiceType, instanceToUpdate),
+					Options: permTemplate.SupportedAccessLevels,
+				}, &chosenPerms)
+				if err != nil {
+					return err
+				}
 
-			if err != nil {
-				return fmt.Errorf("failed to add access: %w", err)
+				// Expand permissions based on ActionMap
+				var expandedPerms []string
+				for _, level := range chosenPerms {
+					if actions, ok := permTemplate.ActionMap[level]; ok {
+						expandedPerms = append(expandedPerms, actions...)
+					}
+				}
+
+				// Save to config
+				err = projectCfg.AddInstanceAccess(
+					serviceTypeToUpdate,
+					instanceToUpdate,
+					targetServiceType,
+					targetInstanceName,
+					expandedPerms,
+				)
+
+				if err != nil {
+					return fmt.Errorf("failed to add access: %w", err)
+				}
 			}
+		}
+	}
+
+	fmt.Printf("DEBUG: Final config before save:\n")
+	if lambdaSvc, ok := projectCfg.Services["lambda"]; ok {
+		for instName, inst := range lambdaSvc.Instances {
+			fmt.Printf("  Lambda '%s': Access = %+v\n", instName, inst.Access)
 		}
 	}
 

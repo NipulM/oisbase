@@ -22,6 +22,10 @@ func (d *DynamoDBService) Name() string {
 	return "dynamodb"
 }
 
+func (d *DynamoDBService) GetServiceCategory() string {
+	return "databases"
+}
+
 func (d *DynamoDBService) GetConfig() (map[string]interface{}, error) {
 	config := make(map[string]interface{})
 
@@ -62,7 +66,7 @@ func (d *DynamoDBService) GenerateModule(config map[string]interface{}) (string,
 		group := environmentGroup(environment)
 
 		// Create service directory structure: environments/{group}/{env}/dynamodb/
-		serviceDir := filepath.Join("environments", group, environment, d.Name())
+		serviceDir := filepath.Join("environments", group, environment, "dynamodb")
 		if err := os.MkdirAll(serviceDir, 0755); err != nil {
 			return "", fmt.Errorf("failed to create dynamodb service directory: %w", err)
 		}
@@ -109,8 +113,6 @@ func (d *DynamoDBService) GenerateModule(config map[string]interface{}) (string,
 		); err != nil {
 			return "", fmt.Errorf("failed to generate IAM policies: %w", err)
 		}
-
-		results = append(results, fmt.Sprintf("  ✓ [%s/%s] Created DynamoDB table: %s", group, environment, tableName))
 
 		results = append(results, fmt.Sprintf("  ✓ [%s/%s] Created DynamoDB table: %s", group, environment, tableName))
 	}

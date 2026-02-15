@@ -8,6 +8,7 @@ type PermissionTemplate struct {
 	ActionMap             map[string][]string
 	UpdateSide            string
 	
+	TargetServiceCategory string
 	DataTemplate          DataTemplateConfig
 	IAMTemplate           IAMTemplateConfig
 }
@@ -29,6 +30,7 @@ var PermissionRegistry = map[string]PermissionTemplate{
 		Type:                  "Identity",
 		UpdateSide:            "source",
 		SupportedAccessLevels: []string{"Read", "Write", "Delete", "All"},
+		TargetServiceCategory: "databases",
 		ActionMap: map[string][]string{
 			"Read":   {"dynamodb:GetItem", "dynamodb:Scan", "dynamodb:Query"},
 			"Write":  {"dynamodb:PutItem", "dynamodb:UpdateItem"},
@@ -58,6 +60,7 @@ var PermissionRegistry = map[string]PermissionTemplate{
 			"Delete": {"s3:DeleteObject"},
 			"All":    {"s3:*"},
 		},
+		TargetServiceCategory: "storage",
 		DataTemplate: DataTemplateConfig{
 			TemplatePath:  "common/data-ssm-parameter.tf.tmpl",
 			ParameterName: "{{ .target_instance }}_bucket_arn",

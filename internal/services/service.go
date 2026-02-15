@@ -9,6 +9,8 @@ import (
 type Service interface {
 	Name() string
 
+	GetServiceCategory() string
+
 	GetConfig() (map[string]interface{}, error)
 
     GenerateModule(config map[string]interface{}) (string, error)

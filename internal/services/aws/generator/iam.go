@@ -104,7 +104,7 @@ func (g *IAMPolicyGenerator) generateDataTf(
 
 	for _, group := range groups {
 		// Skip if no permission template exists for this service pair
-		_, ok := registry.GetPermissionTemplate(serviceType, group.TargetService)
+		permissionTemplate, ok := registry.GetPermissionTemplate(serviceType, group.TargetService)
 		if !ok {
 			continue
 		}
@@ -117,7 +117,8 @@ func (g *IAMPolicyGenerator) generateDataTf(
 		}
 
 		// Generate SSM path based on target service
-		ssmPath := fmt.Sprintf("/%s/%s/arn", getServiceCategory(group.TargetService), group.TargetInstance)
+		ssmPath := fmt.Sprintf("/%s/%s/arn", permissionTemplate.TargetServiceCategory, group.TargetInstance)
+
 
 		var buf bytes.Buffer
 		err = tmpl.ExecuteTemplate(&buf, "data-ssm-parameter.tf.tmpl", map[string]string{
@@ -229,17 +230,4 @@ func (g *IAMPolicyGenerator) generateIAMPolicy(
 	}
 
 	return nil
-}
-
-func getServiceCategory(serviceType string) string {
-	categories := map[string]string{
-		"dynamodb": "databases",
-		"s3":       "storage",
-		"sqs":      "queues",
-		"sns":      "topics",
-	}
-	if category, ok := categories[serviceType]; ok {
-		return category
-	}
-	return "services"
 }
