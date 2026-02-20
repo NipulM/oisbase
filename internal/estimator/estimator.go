@@ -13,10 +13,10 @@ func Estimate(config *config.ProjectConfig) (float64, error) {
 		colourReset = "\033[0m"
 	)
 
-	fmt.Println(colourYellow + "Warning: This will work only if the terraform plan was done using: terraform plan -out=tf.plan" + colourReset)
+	fmt.Println(colourYellow + "Warning: Cost estimation requires a saved Terraform plan file generated via 'terraform plan -out=tf.plan'." + colourReset)
 
 	userApprovalPrompt := &survey.Confirm{
-		Message: "Are you sure you want to estimate the cost of the project using openinfraquote?",
+		Message: "Do you want to proceed with cost estimation using OpenInfraQuote?",
 	}
 	var userApproval bool
 	survey.AskOne(userApprovalPrompt, &userApproval)
