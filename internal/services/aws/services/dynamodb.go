@@ -42,6 +42,12 @@ func (d *DynamoDBService) GetConfig() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to add dynamodb instance to config: %w", err)
 	}
 
+	// Save immediately so GenerateModule can load the instance from disk
+	err = projectconfig.SaveConfig(projectCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save config after adding instance: %w", err)
+	}
+
 	affected, err := registry.PromptForConnections(d.Name(), tableName, projectCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to configure connections: %w", err)
