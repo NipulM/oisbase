@@ -1,6 +1,9 @@
-# OIS — Orchestrated Infrastructure Scaffolder
+# OIS — Infrastructure Scaffolding CLI for IaC Platforms
 
-Build production-ready AWS stacks in seconds. An interactive Go-driven CLI that automates Terraform scaffolding, environment isolation, and service interfaces.
+Build production-ready AWS infrastructure in seconds.
+
+ois is an **opinionated AWS Terraform project generator CLI** that scaffolds
+multi-environment infrastructure, service modules, and state isolation using best practices.
 
 **Website:** [oisbase.dev](https://oisbase.dev) · **Documentation:** [oisbase.dev/docs](https://oisbase.dev/docs)
 
@@ -60,23 +63,23 @@ ois estimate
 
 ## CLI Reference
 
-| Command | Description |
-|---------|-------------|
-| `ois init` | Initialize a new Terraform project with interactive prompts |
-| `ois add [service]` | Add a service instance (e.g., `lambda`, `dynamodb`) |
-| `ois add [service] --template` | Copy the Terraform module when the service wasn't selected during init |
-| `ois estimate` | Estimate costs using OpenInfraQuote (requires `terraform plan -out=tf.plan`) |
+| Command                        | Description                                                                  |
+| ------------------------------ | ---------------------------------------------------------------------------- |
+| `ois init`                     | Initialize a new Terraform project with interactive prompts                  |
+| `ois add [service]`            | Add a service instance (e.g., `lambda`, `dynamodb`)                          |
+| `ois add [service] --template` | Copy the Terraform module when the service wasn't selected during init       |
+| `ois estimate`                 | Estimate costs using OpenInfraQuote (requires `terraform plan -out=tf.plan`) |
 
 ## Supported Services
 
-| Service | Status | Description |
-|---------|--------|-------------|
-| Lambda | Available | Serverless functions |
-| DynamoDB | Available | NoSQL database |
-| RDS | Coming soon | Relational database |
-| VPC | Coming soon | Virtual private cloud |
-| ECS | Coming soon | Container orchestration |
-| S3 | Coming soon | Object storage |
+| Service  | Status      | Description             |
+| -------- | ----------- | ----------------------- |
+| Lambda   | Available   | Serverless functions    |
+| DynamoDB | Available   | NoSQL database          |
+| RDS      | Coming soon | Relational database     |
+| VPC      | Coming soon | Virtual private cloud   |
+| ECS      | Coming soon | Container orchestration |
+| S3       | Coming soon | Object storage          |
 
 ## Generated Project Structure
 
@@ -108,6 +111,17 @@ Before deploying with Terraform, you'll need to set up:
 2. **DynamoDB table** for state locking
 
 See the [documentation](https://oisbase.dev/docs) for step-by-step guides and service-specific prerequisites.
+
+## When Should I Use ois?
+
+Use ois if you:
+
+- Are starting a new AWS Terraform project
+- Want a consistent, production-ready structure
+- Need multi-environment isolation from day one
+- Prefer opinionated defaults over custom boilerplate
+
+ois is especially useful for teams standardizing AWS infrastructure.
 
 ## License
 
