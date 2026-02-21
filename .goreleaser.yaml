@@ -3,9 +3,9 @@ before:
     - go mod tidy
 
 release:
-  draft: true
+  # draft: true
   prerelease: auto
-  make_latest: false
+  make_latest: true
 
 builds:
   - env:

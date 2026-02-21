@@ -10,6 +10,40 @@ import (
 	"github.com/NipulM/oisbase/templates"
 )
 
+func CopyModuleForService(serviceName string) error {
+	sourceBaseDir := "services/aws/modules"
+	serviceDir := filepath.Join(sourceBaseDir, serviceName)
+
+	entries, err := fs.ReadDir(templates.ModulesFS, serviceDir)
+	if err != nil {
+		return fmt.Errorf("no module template found for %s: %w", serviceName, err)
+	}
+
+	destDir := filepath.Join("modules", serviceName)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("failed to create module directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		srcPath := filepath.Join(serviceDir, entry.Name())
+		content, err := templates.ModulesFS.ReadFile(srcPath)
+		if err != nil {
+			return fmt.Errorf("failed to read embedded file %s: %w", srcPath, err)
+		}
+
+		destPath := filepath.Join(destDir, entry.Name())
+		if err := os.WriteFile(destPath, content, 0644); err != nil {
+			return fmt.Errorf("failed to write file %s: %w", destPath, err)
+		}
+	}
+
+	return nil
+}
+
 func CopyModules(config *config.ProjectConfig) error {
 	// Embedded FS paths are under services/aws/modules/<serviceName>/
 	sourceBaseDir := "services/aws/modules"

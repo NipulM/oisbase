@@ -11,6 +11,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var addTemplate bool
+const colourBlue = "\033[34m"
+const colourReset = "\033[0m"
+
 var addCmd = &cobra.Command{
 	Use:   "add [service]",
 	Short: "Add a service instance to your project",
@@ -19,8 +23,6 @@ var addCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		serviceName := args[0]
 
-		fmt.Printf("🔧 Adding %s to your project...\n\n", serviceName)
-
 		// Load project-level config from .oisbase.json
 		projectCfg, err := config.LoadConfig()
 		if err != nil {
@@ -28,6 +30,23 @@ var addCmd = &cobra.Command{
 			fmt.Println("Run 'oisbase init' first to initialize your project.")
 			os.Exit(1)
 		}
+
+		// Copy the service module if --template is set (e.g. when service wasn't selected during init)
+		if addTemplate {
+			if err := os.MkdirAll("modules", 0755); err != nil {
+				fmt.Printf("❌ Error creating modules directory: %v\n", err)
+				os.Exit(1)
+			}
+			if err := awsgenerator.CopyModuleForService(serviceName); err != nil {
+				fmt.Printf("❌ Error copying module: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("📦 Copied %s module to modules/%s/\n\n", serviceName, serviceName)
+			fmt.Printf("%sYou can now create the service instance by running 'ois add %s'\n%s", colourBlue, serviceName, colourReset)
+			os.Exit(0)
+		}
+
+		fmt.Printf("🔧 Adding %s to your project...\n\n", serviceName)
 
 		// Get the service implementation
 		service, err := services.GetService(serviceName)
@@ -94,4 +113,5 @@ var addCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(addCmd)
+	addCmd.Flags().BoolVar(&addTemplate, "template", false, "Copy the Terraform module for this service (use when the service wasn't selected during init)")
 }
