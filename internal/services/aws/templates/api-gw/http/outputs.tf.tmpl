@@ -1,29 +1,30 @@
+{{ $apiName := .api_name | replace "-" "_" }}
 output "http_api_id" {
   description = "ID of the HTTP API"
-  value       = aws_apigatewayv2_api.http_api.id
+  value       = aws_apigatewayv2_api.{{ $apiName }}_http_api.id
 }
 
 output "http_api_endpoint" {
   description = "HTTP API Gateway endpoint URL"
-  value       = aws_apigatewayv2_api.http_api.api_endpoint
+  value       = aws_apigatewayv2_api.{{ $apiName }}_http_api.api_endpoint
 }
 
 output "http_api_arn" {
   description = "ARN of the HTTP API"
-  value       = aws_apigatewayv2_api.http_api.arn
+  value       = aws_apigatewayv2_api.{{ $apiName }}_http_api.arn
 }
 
 output "http_api_execution_arn" {
   description = "Execution ARN of the HTTP API"
-  value       = aws_apigatewayv2_api.http_api.execution_arn
+  value       = aws_apigatewayv2_api.{{ $apiName }}_http_api.execution_arn
 }
 
 output "stage_name" {
   description = "Name of the API Gateway stage"
-  value       = aws_apigatewayv2_stage.default.name
+  value       = aws_apigatewayv2_stage.{{ $apiName }}_default.name
 }
 
 output "stage_invoke_url" {
   description = "Invoke URL for the HTTP API stage"
-  value       = aws_apigatewayv2_stage.default.invoke_url
+  value       = aws_apigatewayv2_stage.{{ $apiName }}_default.invoke_url
 } 
