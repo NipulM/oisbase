@@ -20,11 +20,13 @@ func GetService(serviceName string) (Service, error) {
 		return &aws.LambdaService{}, nil
 	case "dynamodb":
 		return &aws.DynamoDBService{}, nil
+	case "api-gateway":
+		return &aws.APIGatewayService{}, nil
 	default:
 		return nil, fmt.Errorf("service '%s' not supported yet", serviceName)
 	}
 }
 
 func ListAvailableServices() []string {
-	return []string{"lambda", "dynamodb"}
+	return []string{"lambda", "dynamodb", "api-gateway"}
 }

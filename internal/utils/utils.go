@@ -16,3 +16,11 @@ func CapitalizeWords(s string) string {
 	}
 	return strings.Join(words, " ") 
 }
+
+// environmentGroup returns "production" for prod, "pre-production" for everything else.
+func EnvironmentGroup(env string) string {
+	if env == "prod" {
+		return "production"
+	}
+	return "pre-production"
+}

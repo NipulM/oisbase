@@ -2,48 +2,83 @@ package registry
 
 import "strings"
 
-// AffectedInstance represents a service instance whose TF files need
-// regenerating because a cross-service connection modified its config.
 type AffectedInstance struct {
 	ServiceType  string
 	InstanceName string
 }
 
-// ServiceTemplateConfig defines what templates a particular side of a
-// connection needs. If a pointer is nil, that template type is not needed.
-// The system uses NeedsUpdate() to decide whether TF files must be
-// (re)generated for that side.
+type ConnectionMode string
+
+const (
+	PermissionMode ConnectionMode = "permission"
+	RouteMode      ConnectionMode = "route"
+)
+
 type ServiceTemplateConfig struct {
-	Category     string           // SSM path category, e.g. "databases", "compute"
-	NameVar      string           // Terraform variable for instance naming, e.g. "lambda_name", "table_name"
+	Category string
+	NameVar  string
+
+	// Append-based flow (PermissionMode)
 	DataTemplate *DataTemplateConfig
 	IAMTemplate  *IAMTemplateConfig
+
+	// Re-render flow — when set, the generator re-renders these instance
+	// template files instead of using the append-based flow.
+	InstanceRegenTemplates []RegenTemplateConfig
 }
 
-// NeedsUpdate returns true if this side has any templates that require generation.
 func (s ServiceTemplateConfig) NeedsUpdate() bool {
-	return s.DataTemplate != nil || s.IAMTemplate != nil
+	return s.DataTemplate != nil || s.IAMTemplate != nil || len(s.InstanceRegenTemplates) > 0
+}
+
+func (s ServiceTemplateConfig) NeedsRegen() bool {
+	return len(s.InstanceRegenTemplates) > 0
 }
 
 type DataTemplateConfig struct {
-	TemplatePath  string // Path to the data.tf template
-	ParameterName string // e.g., "{{ .target_instance }}_table_arn"
-	SSMPath       string // e.g., "/databases/{{ .target_instance }}/arn"
+	TemplatePath  string
+	ParameterName string
+	SSMPath       string
 }
 
 type IAMTemplateConfig struct {
-	TemplatePath string // Path to the IAM policy template
+	TemplatePath string
+}
+
+type RegenTemplateConfig struct {
+	TemplateName string // e.g., "data.tf.tmpl"
+	OutputFile   string // e.g., "data.tf"
+}
+
+// ConnectedTargetSSMConfig declares what SSM params each connected target needs.
+type ConnectedTargetSSMConfig struct {
+	Suffix string // "arn", "name", etc.
 }
 
 type PermissionTemplate struct {
+	Mode ConnectionMode
+
 	SupportedAccessLevels []string
-	DefaultAccessLevel    string // Pre-selected option in the access level prompt
+	DefaultAccessLevel    string
 	ActionMap             map[string][]string
 
-	// Source is the left side of "X-to-Y", Target is the right side.
-	// Each side independently declares what templates it needs.
+	SupportedHTTPMethods []string
+
+	// Declares what SSM lookups each connected target needs (for re-render flow).
+	ConnectedTargetSSM []ConnectedTargetSSMConfig
+
+	// Embedded FS glob for the service's instance templates (for re-render flow).
+	TemplateFS string
+
 	Source ServiceTemplateConfig
 	Target ServiceTemplateConfig
+}
+
+func (p PermissionTemplate) GetMode() ConnectionMode {
+	if p.Mode == "" {
+		return PermissionMode
+	}
+	return p.Mode
 }
 
 var PermissionRegistry = map[string]PermissionTemplate{
@@ -99,14 +134,37 @@ var PermissionRegistry = map[string]PermissionTemplate{
 			NameVar:  "bucket_name",
 		},
 	},
+	"api-gateway-to-lambda": {
+		Mode:                 RouteMode,
+		SupportedHTTPMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		ActionMap: map[string][]string{
+			"invoke": {"lambda:InvokeFunction"},
+		},
+		ConnectedTargetSSM: []ConnectedTargetSSMConfig{
+			{Suffix: "arn"},
+			{Suffix: "name"},
+		},
+		TemplateFS: "api-gw/http/*.tmpl",
+		Source: ServiceTemplateConfig{
+			Category: "network",
+			NameVar:  "api_name",
+			InstanceRegenTemplates: []RegenTemplateConfig{
+				{TemplateName: "main.tf.tmpl", OutputFile: "main.tf"},
+				{TemplateName: "data.tf.tmpl", OutputFile: "data.tf"},
+				{TemplateName: "iam.tf.tmpl", OutputFile: "iam.tf"},
+				{TemplateName: "api.yaml.tmpl", OutputFile: "api.yaml"},
+			},
+		},
+		Target: ServiceTemplateConfig{
+			Category: "compute",
+			NameVar:  "lambda_name",
+		},
+	},
 }
 
-// GetAvailableConnections returns service types that the given service can
-// connect to, based on registry entries in either direction.
 func GetAvailableConnections(currentService string) []string {
 	var options []string
 	seen := make(map[string]bool)
-
 	for key := range PermissionRegistry {
 		parts := strings.Split(key, "-to-")
 		if parts[0] == currentService && !seen[parts[1]] {
@@ -121,8 +179,6 @@ func GetAvailableConnections(currentService string) []string {
 	return options
 }
 
-// GetPermissionTemplate finds the registry entry for a pair of services,
-// trying both key directions.
 func GetPermissionTemplate(serviceA, serviceB string) (PermissionTemplate, bool) {
 	if tmpl, ok := PermissionRegistry[serviceA+"-to-"+serviceB]; ok {
 		return tmpl, true
@@ -133,8 +189,6 @@ func GetPermissionTemplate(serviceA, serviceB string) (PermissionTemplate, bool)
 	return PermissionTemplate{}, false
 }
 
-// ResolveDirection determines which side of the registry key the given
-// service is on. Returns (sourceService, targetService, currentIsSource).
 func ResolveDirection(currentService, otherService string) (sourceService, targetService string, currentIsSource bool, found bool) {
 	if _, ok := PermissionRegistry[currentService+"-to-"+otherService]; ok {
 		return currentService, otherService, true, true
@@ -145,17 +199,11 @@ func ResolveDirection(currentService, otherService string) (sourceService, targe
 	return "", "", false, false
 }
 
-// GetTemplatesForService returns the templates that apply to serviceType
-// when it is connected to otherService, plus the other side's category.
-// This lets the generator know which templates to use without caring about
-// key direction.
 func GetTemplatesForService(serviceType, otherService string) (mine ServiceTemplateConfig, otherCategory string, ok bool) {
 	if tmpl, found := PermissionRegistry[serviceType+"-to-"+otherService]; found {
-		// serviceType is Source
 		return tmpl.Source, tmpl.Target.Category, true
 	}
 	if tmpl, found := PermissionRegistry[otherService+"-to-"+serviceType]; found {
-		// serviceType is Target
 		return tmpl.Target, tmpl.Source.Category, true
 	}
 	return ServiceTemplateConfig{}, "", false

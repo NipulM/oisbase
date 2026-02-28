@@ -1,5 +1,4 @@
 {{ $policy_name := .policy_name | replace "-" "_" }}
-
 resource "aws_iam_policy" "{{ $policy_name }}" {
   name        = "${var.app_name}-${var.{{ .name_var }}}-{{ .target_label }}-policy-${var.environment}"
   description = "IAM policy for {{ .source_instance }} to access {{ .target_label }}"

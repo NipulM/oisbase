@@ -1,0 +1,23 @@
+variable "environment" {
+  description = "The environment for this deployment"
+  type        = string
+  default     = "{{ .environment }}"
+}
+
+variable "aws_region" {
+  description = "Region this vpc will be installed."
+  type        = string
+  default     = "{{ .region }}"
+}
+
+variable "api_yml_path" {
+  description = "Path to the API definition YAML file"
+  type        = string
+  default     = "api.yaml"
+}
+
+variable "app_name" {
+  description = "The name of the application"
+  type        = string
+  default     = "{{ .project_name }}"
+}

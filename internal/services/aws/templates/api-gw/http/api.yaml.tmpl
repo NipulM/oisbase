@@ -1,0 +1,37 @@
+openapi: 3.0.3
+info:
+  title: "{{ .api_name }}-http-api-gateway-{{ .environment }}"
+  version: 1.0.0
+  description: "HTTP API for {{ .project_name }} Application"
+  contact:
+    name: {{ .project_name }} API
+{{- if .integrations }}
+
+components:
+  x-amazon-apigateway-integrations:
+{{- range .integrations }}
+    {{ .Name }}:
+      type: aws_proxy
+      httpMethod: POST
+      uri: ${{"{"}}{{ .URIVar }}_uri{{"}"}}
+      payloadFormatVersion: "2.0"
+{{- end }}
+{{- end }}
+{{- if .route_groups }}
+
+paths:
+{{- range .route_groups }}
+  {{ .Path }}:
+{{- range .Methods }}
+    {{ .MethodLower }}:
+      summary: {{ .Summary }}
+      description: {{ .Description }}
+      operationId: {{ .OperationID }}
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/{{ .IntegrationName }}"
+{{- end }}
+{{- end }}
+{{- else }}
+
+paths: {}
+{{- end }}
