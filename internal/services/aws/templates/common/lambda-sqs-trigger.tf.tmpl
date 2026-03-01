@@ -1,0 +1,6 @@
+resource "aws_lambda_event_source_mapping" "{{ .target_instance }}_mapping" {
+  event_source_arn = data.aws_ssm_parameter.{{ .target_instance }}_{{ .target_service }}_arn.value
+  enabled          = true
+  function_name    = module.lambda_{{ .source_instance }}.lambda_arn
+  batch_size       = 1
+}

@@ -303,8 +303,14 @@ func (g *IAMPolicyGenerator) GenerateIAMPolicies(serviceType, instanceName, envi
 	if err := g.generateIAMPolicy(serviceType, instanceName, environment, groups, instanceDir); err != nil {
 		return fmt.Errorf("failed to generate IAM policy: %w", err)
 	}
+	if err := g.generateTriggers(serviceType, instanceName, groups, instanceDir); err != nil {
+		return fmt.Errorf("failed to generate triggers: %w", err)
+	}
 	return nil
 }
+
+// Replace these two functions in iam_generator.go.
+// Everything else in the file stays the same.
 
 func (g *IAMPolicyGenerator) generateDataTf(serviceType string, groups []StatementGroup, instanceDir string) error {
 	dataPath := filepath.Join(instanceDir, "data.tf")
@@ -324,7 +330,13 @@ func (g *IAMPolicyGenerator) generateDataTf(serviceType string, groups []Stateme
 		if !ok || myTemplates.DataTemplate == nil {
 			continue
 		}
-		paramName := fmt.Sprintf("%s_%s_arn", group.TargetInstance, group.TargetService)
+
+		// FIX: normalize hyphens to underscores so it matches what the template renders
+		paramName := strings.ReplaceAll(
+			fmt.Sprintf("%s_%s_arn", group.TargetInstance, group.TargetService),
+			"-", "_",
+		)
+
 		if strings.Contains(existingContent, fmt.Sprintf(`"%s"`, paramName)) {
 			continue
 		}
@@ -360,16 +372,6 @@ func (g *IAMPolicyGenerator) generateIAMPolicy(serviceType, instanceName, enviro
 		Last      bool
 	}
 
-	var statements []PolicyStatement
-	for i, group := range groups {
-		paramName := fmt.Sprintf("%s_%s_arn", group.TargetInstance, group.TargetService)
-		statements = append(statements, PolicyStatement{
-			Actions:   group.Actions,
-			Resources: []string{fmt.Sprintf("data.aws_ssm_parameter.%s.value", paramName)},
-			Last:      i == len(groups)-1,
-		})
-	}
-
 	tmpl, err := template.New("").Funcs(sprig.TxtFuncMap()).Funcs(template.FuncMap{
 		"toJson": func(v interface{}) string {
 			switch val := v.(type) {
@@ -402,41 +404,105 @@ func (g *IAMPolicyGenerator) generateIAMPolicy(serviceType, instanceName, enviro
 		return fmt.Errorf("failed to parse IAM template: %w", err)
 	}
 
-	targetLabel := "access"
-	nameVar := serviceType + "_name"
-	if len(groups) > 0 {
-		first := groups[0].TargetService
-		allSame := true
-		for _, g := range groups[1:] {
-			if g.TargetService != first {
-				allSame = false
-				break
-			}
+	// FIX: Group by target service and generate one policy per target service.
+	// This prevents the "lambda_access_policy" catch-all that combines everything,
+	// and ensures each target service gets its own clean policy.
+	groupsByTarget := make(map[string][]StatementGroup)
+	for _, group := range groups {
+		groupsByTarget[group.TargetService] = append(groupsByTarget[group.TargetService], group)
+	}
+
+	for targetService, targetGroups := range groupsByTarget {
+		policyName := fmt.Sprintf("%s_%s_policy", serviceType, targetService)
+
+		// Skip if this policy already exists in the file
+		if strings.Contains(existingContent, fmt.Sprintf(`"%s"`, policyName)) {
+			continue
 		}
-		if allSame {
-			targetLabel = first
-			if myTemplates, _, ok := registry.GetTemplatesForService(serviceType, first); ok && myTemplates.NameVar != "" {
-				nameVar = myTemplates.NameVar
-			}
+
+		var statements []PolicyStatement
+		for i, group := range targetGroups {
+			paramName := strings.ReplaceAll(
+				fmt.Sprintf("%s_%s_arn", group.TargetInstance, group.TargetService),
+				"-", "_",
+			)
+			statements = append(statements, PolicyStatement{
+				Actions:   group.Actions,
+				Resources: []string{fmt.Sprintf("data.aws_ssm_parameter.%s.value", paramName)},
+				Last:      i == len(targetGroups)-1,
+			})
 		}
+
+		nameVar := serviceType + "_name"
+		if myTemplates, _, ok := registry.GetTemplatesForService(serviceType, targetService); ok && myTemplates.NameVar != "" {
+			nameVar = myTemplates.NameVar
+		}
+
+		var buf bytes.Buffer
+		if err := tmpl.ExecuteTemplate(&buf, "iam-policy.tf.tmpl", map[string]interface{}{
+			"policy_name":     policyName,
+			"source_instance": instanceName,
+			"target_label":    targetService,
+			"name_var":        nameVar,
+			"role_name":       fmt.Sprintf("%s_role", serviceType),
+			"statements":      statements,
+		}); err != nil {
+			return fmt.Errorf("failed to execute IAM template: %w", err)
+		}
+
+		existingContent = existingContent + "\n" + buf.String()
 	}
 
-	var buf bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&buf, "iam-policy.tf.tmpl", map[string]interface{}{
-		"policy_name":     fmt.Sprintf("%s_%s_policy", serviceType, targetLabel),
-		"source_instance": instanceName,
-		"target_label":    targetLabel,
-		"name_var":        nameVar,
-		"role_name":       fmt.Sprintf("%s_role", serviceType),
-		"statements":      statements,
-	}); err != nil {
-		return fmt.Errorf("failed to execute IAM template: %w", err)
+	return os.WriteFile(iamPath, []byte(existingContent), 0644)
+}
+
+func (g *IAMPolicyGenerator) generateTriggers(serviceType, instanceName string, groups []StatementGroup, instanceDir string) error {
+	triggerPath := filepath.Join(instanceDir, "trigger.tf")
+	existingContent := ""
+	if content, err := os.ReadFile(triggerPath); err == nil {
+		existingContent = string(content)
 	}
 
-	policyName := fmt.Sprintf("%s_%s_policy", serviceType, targetLabel)
-	if strings.Contains(existingContent, fmt.Sprintf(`"%s"`, policyName)) {
-		return nil
+	var newEntries strings.Builder
+
+	for _, group := range groups {
+		myTemplates, _, ok := registry.GetTemplatesForService(serviceType, group.TargetService)
+		if !ok || myTemplates.TriggerTemplate == nil {
+			continue
+		}
+
+		targetUnderscored := strings.ReplaceAll(group.TargetInstance, "-", "_")
+		sourceUnderscored := strings.ReplaceAll(instanceName, "-", "_")
+
+		// Check if this trigger already exists
+		mappingName := targetUnderscored + "_mapping"
+		if strings.Contains(existingContent, fmt.Sprintf(`"%s"`, mappingName)) {
+			continue
+		}
+
+		tmpl, err := template.New("").Funcs(sprig.TxtFuncMap()).ParseFS(
+			templates.CommonFS,
+			myTemplates.TriggerTemplate.TemplatePath,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to parse trigger template: %w", err)
+		}
+
+		var buf bytes.Buffer
+		if err := tmpl.ExecuteTemplate(&buf, filepath.Base(myTemplates.TriggerTemplate.TemplatePath), map[string]string{
+			"target_instance": targetUnderscored,
+			"target_service":  group.TargetService,
+			"source_instance": sourceUnderscored,
+		}); err != nil {
+			return fmt.Errorf("failed to execute trigger template: %w", err)
+		}
+		newEntries.WriteString(buf.String())
+		newEntries.WriteString("\n")
 	}
 
-	return os.WriteFile(iamPath, []byte(existingContent+"\n"+buf.String()), 0644)
+	if newEntries.Len() > 0 {
+		finalContent := existingContent + "\n" + newEntries.String()
+		return os.WriteFile(triggerPath, []byte(finalContent), 0644)
+	}
+	return nil
 }

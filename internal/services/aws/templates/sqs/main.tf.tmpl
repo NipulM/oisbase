@@ -1,0 +1,18 @@
+{{ $qn := .queue_name | replace "-" "_" }}
+module "{{ $qn }}_queue" {
+  source      = "../../../../../modules/sqs"
+  queue_name  = "${var.app_name}-${var.queue_name}-queue-${var.environment}"
+  environment = var.environment
+}
+
+resource "aws_ssm_parameter" "{{ $qn }}_queue_arn" {
+  name  = "/${var.app_name}/${var.environment}/queues/${var.queue_name}/arn"
+  type  = "String"
+  value = module.{{ $qn }}_queue.queue_arn
+}
+
+resource "aws_ssm_parameter" "{{ $qn }}_queue_url" {
+  name  = "/${var.app_name}/${var.environment}/queues/${var.queue_name}/url"
+  type  = "String"
+  value = module.{{ $qn }}_queue.queue_url
+}
