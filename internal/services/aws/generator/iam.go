@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/NipulM/oisbase/internal/services/aws/templates"
 )
 
-// environmentGroup maps an environment name to its directory group.
 func environmentGroup(env string) string {
 	if env == "prod" {
 		return "production"
@@ -37,8 +37,9 @@ func NewIAMPolicyGenerator(cfg *config.ProjectConfig) *IAMPolicyGenerator {
 	return &IAMPolicyGenerator{config: cfg}
 }
 
-// UpdateAffectedInstances regenerates IAM/data.tf files for service instances
-// that were modified as a side-effect of creating a different service.
+// UpdateAffectedInstances regenerates TF files for affected service instances.
+// Uses the registry to decide: NeedsRegen() → re-render instance templates,
+// otherwise → append-based IAM/data flow.
 func (g *IAMPolicyGenerator) UpdateAffectedInstances(
 	affected []registry.AffectedInstance,
 	environments []string,
@@ -47,40 +48,244 @@ func (g *IAMPolicyGenerator) UpdateAffectedInstances(
 		group := environmentGroup(env)
 		for _, inst := range affected {
 			instanceDir := filepath.Join("environments", group, env, inst.ServiceType, inst.InstanceName)
-			if err := g.GenerateIAMPolicies(inst.ServiceType, inst.InstanceName, env, instanceDir); err != nil {
-				return fmt.Errorf("failed to update IAM for %s/%s in %s: %w",
-					inst.ServiceType, inst.InstanceName, env, err)
+
+			if g.serviceNeedsRegen(inst.ServiceType) {
+				if err := g.regenInstanceTemplates(inst.ServiceType, inst.InstanceName, env, instanceDir); err != nil {
+					return fmt.Errorf("failed to regen %s/%s in %s: %w", inst.ServiceType, inst.InstanceName, env, err)
+				}
+			} else {
+				if err := g.GenerateIAMPolicies(inst.ServiceType, inst.InstanceName, env, instanceDir); err != nil {
+					return fmt.Errorf("failed to update IAM for %s/%s in %s: %w", inst.ServiceType, inst.InstanceName, env, err)
+				}
 			}
 		}
 	}
 	return nil
 }
 
-// GenerateIAMPolicies generates IAM policies for a specific instance
-func (g *IAMPolicyGenerator) GenerateIAMPolicies(
-	serviceType string,
-	instanceName string,
-	environment string,
-	instanceDir string, // e.g., "environments/pre-production/dev/lambda/auth-service"
+// serviceNeedsRegen checks if any registry entry for this service type
+// has InstanceRegenTemplates on its side.
+func (g *IAMPolicyGenerator) serviceNeedsRegen(serviceType string) bool {
+	service, exists := g.config.Services[serviceType]
+	if !exists {
+		return false
+	}
+	// Check any instance's access to find a registry entry
+	for _, inst := range service.Instances {
+		if inst.Access == nil {
+			continue
+		}
+		for targetService := range inst.Access {
+			myTemplates, _, ok := registry.GetTemplatesForService(serviceType, targetService)
+			if ok && myTemplates.NeedsRegen() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ---- Re-render flow ----
+
+// ConnectedTarget represents a target instance generically.
+// Templates iterate over these — the field values come from config + registry.
+type ConnectedTarget struct {
+	Name            string            // "marketplace-control-service"
+	NameUnderscored string            // "marketplace_control_service"
+	ServiceType     string            // "lambda"
+	Category        string            // "compute"
+	SSMParams       map[string]string // suffix → resource name, e.g. "arn" → "lambda_marketplace_control_service_arn"
+}
+
+// SSMParamResource returns the Terraform resource name for a given suffix.
+// Used in templates: {{ .SSMParamResource "name" }}
+func (ct ConnectedTarget) SSMParamResource(suffix string) string {
+	return ct.SSMParams[suffix]
+}
+
+type RouteIntegration struct {
+	Name   string // "MarketplaceControlServiceIntegration"
+	URIVar string // "marketplace_control_service" (the connected target's underscored name)
+}
+
+type RouteMethodData struct {
+	MethodLower     string
+	Summary         string
+	Description     string
+	OperationID     string
+	IntegrationName string
+}
+
+type RouteGroupData struct {
+	Path    string
+	Methods []RouteMethodData
+}
+
+func (g *IAMPolicyGenerator) regenInstanceTemplates(
+	serviceType, instanceName, environment, instanceDir string,
 ) error {
+	instance := g.config.Services[serviceType].Instances[instanceName]
+	if instance == nil {
+		return fmt.Errorf("instance %s/%s not found", serviceType, instanceName)
+	}
+
+	// Find registry config for this service
+	var regenTemplates []registry.RegenTemplateConfig
+	var templateFSGlob string
+
+	for targetService := range instance.Access {
+		myTemplates, _, ok := registry.GetTemplatesForService(serviceType, targetService)
+		if !ok || !myTemplates.NeedsRegen() {
+			continue
+		}
+		regenTemplates = myTemplates.InstanceRegenTemplates
+		permTemplate, _ := registry.GetPermissionTemplate(serviceType, targetService)
+		templateFSGlob = permTemplate.TemplateFS
+		break
+	}
+
+	if len(regenTemplates) == 0 || templateFSGlob == "" {
+		return nil
+	}
+
+	templateData := g.BuildRegenTemplateData(serviceType, instanceName, environment, instance)
+
+	// Load templates from embedded FS
+	fsToUse := templates.GetFS(templateFSGlob)
+	if fsToUse == nil {
+		return fmt.Errorf("no embedded FS found for glob %s", templateFSGlob)
+	}
+
+	tmpl, err := template.New("").Funcs(sprig.TxtFuncMap()).ParseFS(fsToUse, templateFSGlob)
+	if err != nil {
+		return fmt.Errorf("failed to parse templates: %w", err)
+	}
+
+	for _, rt := range regenTemplates {
+		if tmpl.Lookup(rt.TemplateName) == nil {
+			continue
+		}
+		var out bytes.Buffer
+		if err := tmpl.ExecuteTemplate(&out, rt.TemplateName, templateData); err != nil {
+			return fmt.Errorf("failed to execute %s: %w", rt.TemplateName, err)
+		}
+		if err := os.WriteFile(filepath.Join(instanceDir, rt.OutputFile), out.Bytes(), 0644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", rt.OutputFile, err)
+		}
+	}
+
+	fmt.Printf("  ✓ Updated %s/%s templates in %s\n", serviceType, instanceName, environment)
+	return nil
+}
+
+// BuildRegenTemplateData builds template data generically from config + registry.
+// Exported so service files (api_gateway.go) can reuse the same builder.
+func (g *IAMPolicyGenerator) BuildRegenTemplateData(
+	serviceType, instanceName, environment string,
+	instance *config.Instance,
+) map[string]interface{} {
+	var connectedTargets []ConnectedTarget
+	targetSeen := make(map[string]bool)
+
+	if instance.Access != nil {
+		for targetService, targetInstances := range instance.Access {
+			permTemplate, _ := registry.GetPermissionTemplate(serviceType, targetService)
+			_, targetCategory, _ := registry.GetTemplatesForService(serviceType, targetService)
+
+			for targetInst := range targetInstances {
+				key := targetService + "/" + targetInst
+				if targetSeen[key] {
+					continue
+				}
+				targetSeen[key] = true
+
+				nameUnderscored := strings.ReplaceAll(targetInst, "-", "_")
+				ct := ConnectedTarget{
+					Name:            targetInst,
+					NameUnderscored: nameUnderscored,
+					ServiceType:     targetService,
+					Category:        targetCategory,
+					SSMParams:       make(map[string]string),
+				}
+
+				// Build SSM param resource names from registry's ConnectedTargetSSM
+				for _, ssmCfg := range permTemplate.ConnectedTargetSSM {
+					ct.SSMParams[ssmCfg.Suffix] = targetService + "_" + nameUnderscored + "_" + ssmCfg.Suffix
+				}
+
+				connectedTargets = append(connectedTargets, ct)
+			}
+		}
+	}
+
+	integrations, routeGroups := buildRouteData(instance.Routes)
+
+	return map[string]interface{}{
+		"api_name":             instanceName,
+		"api_name_underscored": strings.ReplaceAll(instanceName, "-", "_"),
+		"project_name":         g.config.ProjectName,
+		"region":               g.config.Region,
+		"environment":          environment,
+		"connected_targets":    connectedTargets,
+		"integrations":         integrations,
+		"route_groups":         routeGroups,
+	}
+}
+
+func buildRouteData(routes []config.Route) ([]RouteIntegration, []RouteGroupData) {
+	if len(routes) == 0 {
+		return nil, nil
+	}
+
+	integrationSet := make(map[string]bool)
+	var integrations []RouteIntegration
+	pathRoutes := make(map[string][]RouteMethodData)
+	var pathOrder []string
+
+	for _, r := range routes {
+		if !integrationSet[r.IntegrationName] {
+			integrationSet[r.IntegrationName] = true
+			integrations = append(integrations, RouteIntegration{
+				Name:   r.IntegrationName,
+				URIVar: strings.ReplaceAll(r.TargetInstance, "-", "_"),
+			})
+		}
+		if _, exists := pathRoutes[r.Path]; !exists {
+			pathOrder = append(pathOrder, r.Path)
+		}
+		pathRoutes[r.Path] = append(pathRoutes[r.Path], RouteMethodData{
+			MethodLower:     strings.ToLower(r.Method),
+			Summary:         r.Summary,
+			Description:     r.Description,
+			OperationID:     r.OperationID,
+			IntegrationName: r.IntegrationName,
+		})
+	}
+
+	sort.Strings(pathOrder)
+	var routeGroups []RouteGroupData
+	for _, path := range pathOrder {
+		routeGroups = append(routeGroups, RouteGroupData{Path: path, Methods: pathRoutes[path]})
+	}
+	return integrations, routeGroups
+}
+
+// ---- Append-based flow (unchanged) ----
+
+func (g *IAMPolicyGenerator) GenerateIAMPolicies(serviceType, instanceName, environment, instanceDir string) error {
 	service, exists := g.config.Services[serviceType]
 	if !exists {
 		return fmt.Errorf("service %s not found", serviceType)
 	}
-
 	instance, exists := service.Instances[instanceName]
 	if !exists {
 		return fmt.Errorf("instance %s not found in service %s", instanceName, serviceType)
 	}
-
-	// Skip if no access defined
 	if instance.Access == nil {
 		return nil
 	}
 
 	var groups []StatementGroup
-
-	// Iterate through all access definitions
 	for targetService, instances := range instance.Access {
 		for targetInstance, permissions := range instances {
 			groups = append(groups, StatementGroup{
@@ -92,101 +297,63 @@ func (g *IAMPolicyGenerator) GenerateIAMPolicies(
 		}
 	}
 
-	// Generate data.tf entries
 	if err := g.generateDataTf(serviceType, groups, instanceDir); err != nil {
 		return fmt.Errorf("failed to generate data.tf: %w", err)
 	}
-
-	// Generate IAM policy
 	if err := g.generateIAMPolicy(serviceType, instanceName, environment, groups, instanceDir); err != nil {
 		return fmt.Errorf("failed to generate IAM policy: %w", err)
 	}
-
 	return nil
 }
 
-func (g *IAMPolicyGenerator) generateDataTf(
-	serviceType string,
-	groups []StatementGroup,
-	instanceDir string,
-) error {
+func (g *IAMPolicyGenerator) generateDataTf(serviceType string, groups []StatementGroup, instanceDir string) error {
 	dataPath := filepath.Join(instanceDir, "data.tf")
-
-	// Read existing data.tf if it exists
 	existingContent := ""
 	if content, err := os.ReadFile(dataPath); err == nil {
 		existingContent = string(content)
 	}
 
-	// Load template
-	tmpl, err := template.New("").Funcs(sprig.TxtFuncMap()).ParseFS(
-		templates.CommonFS,
-		"common/data-ssm-parameter.tf.tmpl",
-	)
+	tmpl, err := template.New("").Funcs(sprig.TxtFuncMap()).ParseFS(templates.CommonFS, "common/data-ssm-parameter.tf.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to parse data template: %w", err)
 	}
 
 	var newEntries strings.Builder
-
 	for _, group := range groups {
-		// Use GetTemplatesForService to get the templates for this service
-		// and the other side's category (for SSM path)
 		myTemplates, otherCategory, ok := registry.GetTemplatesForService(serviceType, group.TargetService)
 		if !ok || myTemplates.DataTemplate == nil {
 			continue
 		}
-
 		paramName := fmt.Sprintf("%s_%s_arn", group.TargetInstance, group.TargetService)
-
-		// Check if this parameter already exists
 		if strings.Contains(existingContent, fmt.Sprintf(`"%s"`, paramName)) {
 			continue
 		}
-
-		// Generate SSM path using the other side's category
 		ssmPath := fmt.Sprintf("/%s/%s/arn", otherCategory, group.TargetInstance)
 
 		var buf bytes.Buffer
-		err = tmpl.ExecuteTemplate(&buf, "data-ssm-parameter.tf.tmpl", map[string]string{
+		if err := tmpl.ExecuteTemplate(&buf, "data-ssm-parameter.tf.tmpl", map[string]string{
 			"parameter_name": paramName,
 			"ssm_path":       ssmPath,
-		})
-		if err != nil {
+		}); err != nil {
 			return fmt.Errorf("failed to execute data template: %w", err)
 		}
-
 		newEntries.WriteString(buf.String())
 		newEntries.WriteString("\n")
 	}
 
-	// Append new entries to existing content
 	if newEntries.Len() > 0 {
-		finalContent := existingContent + "\n" + newEntries.String()
-		if err := os.WriteFile(dataPath, []byte(finalContent), 0644); err != nil {
-			return fmt.Errorf("failed to write data.tf: %w", err)
-		}
+		return os.WriteFile(dataPath, []byte(existingContent+"\n"+newEntries.String()), 0644)
 	}
-
 	return nil
 }
 
-func (g *IAMPolicyGenerator) generateIAMPolicy(
-	serviceType string,
-	instanceName string,
-	environment string,
-	groups []StatementGroup,
-	instanceDir string,
-) error {
+func (g *IAMPolicyGenerator) generateIAMPolicy(serviceType, instanceName, environment string, groups []StatementGroup, instanceDir string) error {
 	iamPath := filepath.Join(instanceDir, "iam.tf")
-
-	// Read existing iam.tf
 	existingContent := ""
 	if content, err := os.ReadFile(iamPath); err == nil {
 		existingContent = string(content)
 	}
 
-	// Build statements for the policy
 	type PolicyStatement struct {
 		Actions   []string
 		Resources []string
@@ -196,21 +363,14 @@ func (g *IAMPolicyGenerator) generateIAMPolicy(
 	var statements []PolicyStatement
 	for i, group := range groups {
 		paramName := fmt.Sprintf("%s_%s_arn", group.TargetInstance, group.TargetService)
-
-		stmt := PolicyStatement{
-			Actions: group.Actions,
-			Resources: []string{
-				fmt.Sprintf("data.aws_ssm_parameter.%s.value", paramName),
-			},
-			Last: i == len(groups)-1,
-		}
-
-		statements = append(statements, stmt)
+		statements = append(statements, PolicyStatement{
+			Actions:   group.Actions,
+			Resources: []string{fmt.Sprintf("data.aws_ssm_parameter.%s.value", paramName)},
+			Last:      i == len(groups)-1,
+		})
 	}
 
-	// Load template
 	tmpl, err := template.New("").Funcs(sprig.TxtFuncMap()).Funcs(template.FuncMap{
-		// toJson quotes values — use for Action strings like "dynamodb:GetItem"
 		"toJson": func(v interface{}) string {
 			switch val := v.(type) {
 			case []string:
@@ -226,7 +386,6 @@ func (g *IAMPolicyGenerator) generateIAMPolicy(
 				return ""
 			}
 		},
-		// toRef outputs bare references — use for Terraform expressions like data.aws_ssm_parameter.x.value
 		"toRef": func(v interface{}) string {
 			switch val := v.(type) {
 			case []string:
@@ -244,7 +403,7 @@ func (g *IAMPolicyGenerator) generateIAMPolicy(
 	}
 
 	targetLabel := "access"
-	nameVar := serviceType + "_name" // fallback convention
+	nameVar := serviceType + "_name"
 	if len(groups) > 0 {
 		first := groups[0].TargetService
 		allSame := true
@@ -261,33 +420,23 @@ func (g *IAMPolicyGenerator) generateIAMPolicy(
 			}
 		}
 	}
-	policyName := fmt.Sprintf("%s_%s_policy", serviceType, targetLabel)
-
-	roleName := fmt.Sprintf("%s_role", serviceType)
 
 	var buf bytes.Buffer
-	err = tmpl.ExecuteTemplate(&buf, "iam-policy.tf.tmpl", map[string]interface{}{
-		"policy_name":     policyName,
+	if err := tmpl.ExecuteTemplate(&buf, "iam-policy.tf.tmpl", map[string]interface{}{
+		"policy_name":     fmt.Sprintf("%s_%s_policy", serviceType, targetLabel),
 		"source_instance": instanceName,
 		"target_label":    targetLabel,
 		"name_var":        nameVar,
-		"role_name":       roleName,
+		"role_name":       fmt.Sprintf("%s_role", serviceType),
 		"statements":      statements,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("failed to execute IAM template: %w", err)
 	}
 
-	// Check if policy already exists
+	policyName := fmt.Sprintf("%s_%s_policy", serviceType, targetLabel)
 	if strings.Contains(existingContent, fmt.Sprintf(`"%s"`, policyName)) {
-		return nil // Policy already exists
+		return nil
 	}
 
-	// Append to iam.tf
-	finalContent := existingContent + "\n" + buf.String()
-	if err := os.WriteFile(iamPath, []byte(finalContent), 0644); err != nil {
-		return fmt.Errorf("failed to write iam.tf: %w", err)
-	}
-
-	return nil
+	return os.WriteFile(iamPath, []byte(existingContent+"\n"+buf.String()), 0644)
 }

@@ -1,0 +1,9 @@
+{{- range .connected_targets }}
+data "aws_ssm_parameter" "{{ .SSMParamResource "arn" }}" {
+  name = "/${var.app_name}/${var.environment}/services/{{ .ServiceType }}/{{ .Name }}/arn"
+}
+
+data "aws_ssm_parameter" "{{ .SSMParamResource "name" }}" {
+  name = "/${var.app_name}/${var.environment}/services/{{ .ServiceType }}/{{ .Name }}/name"
+}
+{{ end }}

@@ -1,0 +1,32 @@
+resource "aws_iam_role" "api_gateway_role" {
+  name = "${var.app_name}-http-api-gateway-cloudwatch-role-${var.environment}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "apigateway.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+# Attach AWS managed policy for CloudWatch Logs
+resource "aws_iam_role_policy_attachment" "api_gateway_cloudwatch_logs" {
+  role       = aws_iam_role.api_gateway_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+}
+{{- range .connected_targets }}
+
+resource "aws_lambda_permission" "allow_{{ .NameUnderscored }}_invoke" {
+  statement_id  = "AllowExecutionFromAPIGateway-{{ .Name }}"
+  action        = "lambda:InvokeFunction"
+  function_name = data.aws_ssm_parameter.{{ .SSMParamResource "name" }}.value
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.{{ $.api_name_underscored }}_http_api.execution_arn}/*/*"
+}
+{{- end }}

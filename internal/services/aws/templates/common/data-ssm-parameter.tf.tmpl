@@ -1,5 +1,4 @@
 {{ $parameter_name := .parameter_name | replace "-" "_" }}
-
 data "aws_ssm_parameter" "{{ $parameter_name }}" {
   name = "/${var.app_name}/${var.environment}{{ .ssm_path }}"
 }

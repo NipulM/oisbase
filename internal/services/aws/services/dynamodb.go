@@ -14,6 +14,7 @@ import (
 	awsgenerator "github.com/NipulM/oisbase/internal/services/aws/generator"
 	"github.com/NipulM/oisbase/internal/services/aws/registry"
 	"github.com/NipulM/oisbase/internal/services/aws/templates"
+	"github.com/NipulM/oisbase/internal/utils"
 )
 
 type DynamoDBService struct{}
@@ -69,7 +70,7 @@ func (d *DynamoDBService) GenerateModule(config map[string]interface{}) (string,
 	var results []string
 
 	for _, environment := range environments {
-		group := environmentGroup(environment)
+		group := utils.EnvironmentGroup(environment)
 
 		// Create service directory structure: environments/{group}/{env}/dynamodb/
 		serviceDir := filepath.Join("environments", group, environment, "dynamodb")

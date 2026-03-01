@@ -15,6 +15,7 @@ import (
 	awsgenerator "github.com/NipulM/oisbase/internal/services/aws/generator"
 	"github.com/NipulM/oisbase/internal/services/aws/registry"
 	"github.com/NipulM/oisbase/internal/services/aws/templates"
+	"github.com/NipulM/oisbase/internal/utils"
 )
 
 type LambdaService struct{}
@@ -78,13 +79,6 @@ func (l *LambdaService) GetConfig() (map[string]interface{}, error) {
 
 	return config, nil
 }
-// environmentGroup returns "production" for prod, "pre-production" for everything else.
-func environmentGroup(env string) string {
-	if env == "prod" {
-		return "production"
-	}
-	return "pre-production"
-}
 
 func (l *LambdaService) GenerateModule(config map[string]interface{}) (string, error) {
 	environments := config["environments"].([]string)
@@ -95,7 +89,7 @@ func (l *LambdaService) GenerateModule(config map[string]interface{}) (string, e
 	var results []string
 
 	for _, environment := range environments {
-		group := environmentGroup(environment)
+		group := utils.EnvironmentGroup(environment)
 
 		// Create service directory structure: environments/{group}/{env}/lambda/
 		serviceDir := filepath.Join("environments", group, environment, l.Name())
