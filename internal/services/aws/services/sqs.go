@@ -32,6 +32,14 @@ func (s *SQSService) GetConfig() (map[string]interface{}, error) {
 	config["queue_name"] = queueName
 	config["instance_name"] = queueName
 
+	var queueType string
+	survey.AskOne(&survey.Select{
+		Message: "Queue type:",
+		Options: []string{"Standard"},
+		Default: "standard",
+	}, &queueType)
+	config["queue_type"] = queueType
+
 	projectCfg, err := projectconfig.LoadConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load project config: %w", err)

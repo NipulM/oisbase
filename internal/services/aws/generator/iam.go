@@ -303,6 +303,9 @@ func (g *IAMPolicyGenerator) GenerateIAMPolicies(serviceType, instanceName, envi
 	if err := g.generateIAMPolicy(serviceType, instanceName, environment, groups, instanceDir); err != nil {
 		return fmt.Errorf("failed to generate IAM policy: %w", err)
 	}
+	if err := g.generateTriggers(serviceType, instanceName, groups, instanceDir); err != nil {
+		return fmt.Errorf("failed to generate triggers: %w", err)
+	}
 	return nil
 }
 
@@ -451,4 +454,55 @@ func (g *IAMPolicyGenerator) generateIAMPolicy(serviceType, instanceName, enviro
 	}
 
 	return os.WriteFile(iamPath, []byte(existingContent), 0644)
+}
+
+func (g *IAMPolicyGenerator) generateTriggers(serviceType, instanceName string, groups []StatementGroup, instanceDir string) error {
+	triggerPath := filepath.Join(instanceDir, "trigger.tf")
+	existingContent := ""
+	if content, err := os.ReadFile(triggerPath); err == nil {
+		existingContent = string(content)
+	}
+
+	var newEntries strings.Builder
+
+	for _, group := range groups {
+		myTemplates, _, ok := registry.GetTemplatesForService(serviceType, group.TargetService)
+		if !ok || myTemplates.TriggerTemplate == nil {
+			continue
+		}
+
+		targetUnderscored := strings.ReplaceAll(group.TargetInstance, "-", "_")
+		sourceUnderscored := strings.ReplaceAll(instanceName, "-", "_")
+
+		// Check if this trigger already exists
+		mappingName := targetUnderscored + "_mapping"
+		if strings.Contains(existingContent, fmt.Sprintf(`"%s"`, mappingName)) {
+			continue
+		}
+
+		tmpl, err := template.New("").Funcs(sprig.TxtFuncMap()).ParseFS(
+			templates.CommonFS,
+			myTemplates.TriggerTemplate.TemplatePath,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to parse trigger template: %w", err)
+		}
+
+		var buf bytes.Buffer
+		if err := tmpl.ExecuteTemplate(&buf, filepath.Base(myTemplates.TriggerTemplate.TemplatePath), map[string]string{
+			"target_instance": targetUnderscored,
+			"target_service":  group.TargetService,
+			"source_instance": sourceUnderscored,
+		}); err != nil {
+			return fmt.Errorf("failed to execute trigger template: %w", err)
+		}
+		newEntries.WriteString(buf.String())
+		newEntries.WriteString("\n")
+	}
+
+	if newEntries.Len() > 0 {
+		finalContent := existingContent + "\n" + newEntries.String()
+		return os.WriteFile(triggerPath, []byte(finalContent), 0644)
+	}
+	return nil
 }
