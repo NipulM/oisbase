@@ -12,6 +12,7 @@ multi-environment infrastructure, service modules, and state isolation using bes
 - **Zero to Infrastructure in Minutes** — Interactive prompts guide you through setup
 - **Multi-Environment by Default** — Separate dev/staging/prod from the start
 - **Service Isolation** — Each service type manages its own state
+- **Cross-Service Connections** — Auto-generated IAM policies, SSM lookups, and event triggers when you connect services
 - **Incremental Development** — Add services as you need them
 - **Production-Ready Templates** — Battle-tested Terraform modules
 - **Best Practices Built-In** — Proper state management, tagging, and structure
@@ -50,9 +51,17 @@ ois init
 # Add a Lambda function
 ois add lambda
 
-# Add more services
+# Add a DynamoDB table and connect it to your Lambda
 ois add dynamodb
+
+# Add an SQS queue with Lambda trigger
+ois add sqs
+
+# Add an API Gateway with routes to your Lambda
+ois add api-gateway
 ```
+
+When you connect services during `ois add`, the CLI automatically generates the IAM policies, SSM parameter lookups, and event source mappings needed for them to work together.
 
 To estimate costs after generating your infrastructure:
 
@@ -66,40 +75,56 @@ ois estimate
 | Command                        | Description                                                                  |
 | ------------------------------ | ---------------------------------------------------------------------------- |
 | `ois init`                     | Initialize a new Terraform project with interactive prompts                  |
-| `ois add [service]`            | Add a service instance (e.g., `lambda`, `dynamodb`)                          |
+| `ois add [service]`            | Add a service instance (e.g., `lambda`, `dynamodb`, `api-gateway`, `sqs`)    |
 | `ois add [service] --template` | Copy the Terraform module when the service wasn't selected during init       |
 | `ois estimate`                 | Estimate costs using OpenInfraQuote (requires `terraform plan -out=tf.plan`) |
 
 ## Supported Services
 
-| Service  | Status      | Description             |
-| -------- | ----------- | ----------------------- |
-| Lambda   | Available   | Serverless functions    |
-| DynamoDB | Available   | NoSQL database          |
-| RDS      | Coming soon | Relational database     |
-| VPC      | Coming soon | Virtual private cloud   |
-| ECS      | Coming soon | Container orchestration |
-| S3       | Coming soon | Object storage          |
+| Service     | Status      | Description                      |
+| ----------- | ----------- | -------------------------------- |
+| Lambda      | Available   | Serverless functions             |
+| DynamoDB    | Available   | NoSQL database                   |
+| API Gateway | Available   | HTTP API with route-based config |
+| SQS         | Available   | Message queuing                  |
+| S3          | Coming Soon | Object storage                   |
 
 ## Generated Project Structure
 
 After running `ois init` and adding services, your project will look like:
 
 ```
-project-name/
+acme-payments/
 ├── environments/
 │   ├── pre-production/
 │   │   ├── dev/
 │   │   │   ├── lambda/
-│   │   │   └── dynamodb/
+│   │   │   │   ├── payment-processor/
+│   │   │   │   │   ├── main.tf
+│   │   │   │   │   ├── variables.tf
+│   │   │   │   │   ├── iam.tf
+│   │   │   │   │   ├── data.tf
+│   │   │   │   │   └── triggers.tf
+│   │   │   │   └── notification-service/
+│   │   │   ├── dynamodb/
+│   │   │   │   └── transactions/
+│   │   │   ├── sqs/
+│   │   │   │   └── payment-events/
+│   │   │   └── api-gateway/
+│   │   │       └── acme-payments-api/
+│   │   │           ├── main.tf
+│   │   │           ├── variables.tf
+│   │   │           ├── outputs.tf
+│   │   │           ├── iam.tf
+│   │   │           ├── data.tf
+│   │   │           └── api.yaml
 │   │   └── stg/
 │   └── production/
 │       └── prod/
 ├── modules/
 │   ├── lambda/
-│   └── dynamodb/
-├── main.tf
-├── backend.tf
+│   ├── dynamodb/
+│   └── sqs/
 └── .oisbase.json
 ```
 
