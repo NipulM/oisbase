@@ -5,7 +5,7 @@ Build production-ready AWS infrastructure in seconds.
 ois is an **opinionated AWS Terraform project generator CLI** that scaffolds
 multi-environment infrastructure, service modules, and state isolation using best practices.
 
-**Website:** [oisbase.dev](https://oisbase.dev) · **Documentation:** [oisbase.dev/docs](https://oisbase.dev/docs)
+**Documentation:** [oisbase.dev/docs](https://oisbase.dev/docs)
 
 ## Features
 
