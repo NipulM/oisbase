@@ -45,6 +45,7 @@ func GetProjectConfig() (*config.ProjectConfig, error) {
 		Options: []string{
 			"Lambda (Serverless Functions)",
 			"DynamoDB (NoSQL Database)",
+			"SQS (Queue Service)",
 		},
 	}
 	var selectedServices []string
@@ -58,6 +59,10 @@ func GetProjectConfig() (*config.ProjectConfig, error) {
 			}
 		case contains(service, "DynamoDB"):
 			cfg.Services["dynamodb"] = config.Service{
+				Instances: make(map[string]*config.Instance),
+			}
+		case contains(service, "SQS"):
+			cfg.Services["sqs"] = config.Service{
 				Instances: make(map[string]*config.Instance),
 			}
 		}

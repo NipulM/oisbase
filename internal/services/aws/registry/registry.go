@@ -134,6 +134,32 @@ var PermissionRegistry = map[string]PermissionTemplate{
 			NameVar:  "bucket_name",
 		},
 	},
+	"lambda-to-sqs": {
+		SupportedAccessLevels: []string{"Receive", "Send", "Delete", "All"},
+		DefaultAccessLevel:    "Receive",
+		ActionMap: map[string][]string{
+			"Receive": {"sqs:ReceiveMessage"},
+			"Send":    {"sqs:SendMessage"},
+			"Delete":  {"sqs:DeleteMessage"},
+			"All":     {"sqs:*"},
+		},
+		Source: ServiceTemplateConfig{
+			Category: "compute",
+			NameVar:  "lambda_name",
+			DataTemplate: &DataTemplateConfig{
+				TemplatePath:  "common/data-ssm-parameter.tf.tmpl",
+				ParameterName: "{{ .target_instance }}_queue_arn",
+				SSMPath:       "/queues/{{ .target_instance }}/arn",
+			},
+			IAMTemplate: &IAMTemplateConfig{
+				TemplatePath: "common/iam-policy.tf.tmpl",
+			},
+		},
+		Target: ServiceTemplateConfig{
+			Category: "queues",
+			NameVar:  "queue_name",
+		},
+	},
 	"api-gateway-to-lambda": {
 		Mode:                 RouteMode,
 		SupportedHTTPMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
