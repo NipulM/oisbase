@@ -1,0 +1,95 @@
+{{ $poolName := .pool_name | replace "-" "_" }}
+resource "aws_cognito_user_pool" "{{ $poolName }}" {
+  name = "${var.app_name}-${var.pool_name}-${var.environment}"
+
+  username_attributes      = ["email"]
+  auto_verified_attributes = ["email"]
+
+  username_configuration {
+    case_sensitive = false
+  }
+
+  password_policy {
+    minimum_length                   = 8
+    require_lowercase                = true
+    require_numbers                  = true
+    require_symbols                  = true
+    require_uppercase                = true
+    temporary_password_validity_days = 7
+  }
+
+  account_recovery_setting {
+    recovery_mechanism {
+      name     = "verified_email"
+      priority = 1
+    }
+  }
+
+  verification_message_template {
+    default_email_option = "CONFIRM_WITH_CODE"
+    email_subject        = "${var.app_name} - Verify your email"
+    email_message        = "Your verification code is {####}"
+  }
+
+  schema {
+    name                     = "email"
+    attribute_data_type      = "String"
+    required                 = true
+    mutable                  = true
+    developer_only_attribute = false
+
+    string_attribute_constraints {
+      min_length = 1
+      max_length = 256
+    }
+  }
+
+  tags = {
+    Name        = "${var.app_name}-${var.pool_name}-${var.environment}"
+    Environment = var.environment
+  }
+}
+
+resource "aws_cognito_user_pool_client" "{{ $poolName }}_client" {
+  name         = "${var.app_name}-${var.pool_name}-client-${var.environment}"
+  user_pool_id = aws_cognito_user_pool.{{ $poolName }}.id
+
+  generate_secret = false
+
+  explicit_auth_flows = [
+    "ALLOW_USER_PASSWORD_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH"
+  ]
+
+  supported_identity_providers = ["COGNITO"]
+
+  token_validity_units {
+    access_token  = "hours"
+    id_token      = "hours"
+    refresh_token = "days"
+  }
+
+  access_token_validity  = 1
+  id_token_validity      = 1
+  refresh_token_validity = 30
+
+  prevent_user_existence_errors = "ENABLED"
+}
+
+resource "aws_ssm_parameter" "cognito_{{ $poolName }}_user_pool_id" {
+  name  = "/${var.app_name}/${var.environment}/services/cognito/${var.pool_name}/user-pool-id"
+  type  = "String"
+  value = aws_cognito_user_pool.{{ $poolName }}.id
+}
+
+resource "aws_ssm_parameter" "cognito_{{ $poolName }}_user_pool_arn" {
+  name  = "/${var.app_name}/${var.environment}/services/cognito/${var.pool_name}/arn"
+  type  = "String"
+  value = aws_cognito_user_pool.{{ $poolName }}.arn
+}
+
+resource "aws_ssm_parameter" "cognito_{{ $poolName }}_client_id" {
+  name  = "/${var.app_name}/${var.environment}/services/cognito/${var.pool_name}/client-id"
+  type  = "String"
+  value = aws_cognito_user_pool_client.{{ $poolName }}_client.id
+}

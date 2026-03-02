@@ -20,6 +20,9 @@ var APIGatewayFS embed.FS
 //go:embed sqs/*.tmpl
 var SQSFS embed.FS
 
+//go:embed cognito/*.tmpl
+var CognitoFS embed.FS
+
 // GetFS returns the embedded filesystem that contains files matching the glob.
 func GetFS(glob string) fs.FS {
 	for _, f := range []fs.FS{APIGatewayFS, LambdaFS, DynamoDBFS, CommonFS} {

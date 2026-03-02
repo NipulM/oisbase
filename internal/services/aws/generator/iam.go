@@ -417,7 +417,7 @@ func (g *IAMPolicyGenerator) generateIAMPolicy(serviceType, instanceName, enviro
 
 		// Skip if this policy already exists in the file
 		if strings.Contains(existingContent, fmt.Sprintf(`"%s"`, policyName)) {
-			continue
+			existingContent = removePolicyBlock(existingContent, policyName)
 		}
 
 		var statements []PolicyStatement
@@ -505,4 +505,45 @@ func (g *IAMPolicyGenerator) generateTriggers(serviceType, instanceName string, 
 		return os.WriteFile(triggerPath, []byte(finalContent), 0644)
 	}
 	return nil
+}
+
+func removePolicyBlock(content, policyName string) string {
+	content = removeResourceBlock(content, "aws_iam_policy", policyName)
+	content = removeResourceBlock(content, "aws_iam_role_policy_attachment", policyName+"_attachment")
+	return content
+}
+
+func removeResourceBlock(content, resourceType, resourceName string) string {
+	marker := fmt.Sprintf(`resource "%s" "%s"`, resourceType, resourceName)
+	idx := strings.Index(content, marker)
+	if idx == -1 {
+		return content
+	}
+
+	start := idx
+	for start > 0 && content[start-1] == '\n' {
+		start--
+	}
+	
+	braceCount := 0
+	end := idx
+	foundOpen := false
+	for end < len(content) {
+		if content[end] == '{' {
+			braceCount++
+			foundOpen = true
+		} else if content[end] == '}' {
+			braceCount--
+			if foundOpen && braceCount == 0 {
+				end++
+				for end < len(content) && content[end] == '\n' {
+					end++
+				}
+				break
+			}
+		}
+		end++
+	}
+
+	return content[:start] + content[end:]
 }
