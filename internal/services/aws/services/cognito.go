@@ -78,7 +78,14 @@ func (c *CognitoService) GenerateModule(config map[string]interface{}) (string, 
 			return "", fmt.Errorf("failed to create cognito instance directory: %w", err)
 		}
 
-		if err := c.generateInstanceFiles(instanceDir, config); err != nil {
+		// Pass environment into config for template rendering
+		envConfig := make(map[string]interface{})
+		for k, v := range config {
+			envConfig[k] = v
+		}
+		envConfig["environment"] = environment
+
+		if err := c.generateInstanceFiles(instanceDir, envConfig); err != nil {
 			return "", err
 		}
 
