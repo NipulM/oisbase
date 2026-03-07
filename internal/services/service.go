@@ -24,11 +24,13 @@ func GetService(serviceName string) (Service, error) {
 		return &aws.APIGatewayService{}, nil
 	case "sqs":
 		return &aws.SQSService{}, nil
+	case "cognito":
+		return &aws.CognitoService{}, nil
 	default:
 		return nil, fmt.Errorf("service '%s' not supported yet", serviceName)
 	}
 }
 
 func ListAvailableServices() []string {
-	return []string{"lambda", "dynamodb", "api-gateway", "sqs"}
+	return []string{"lambda", "dynamodb", "api-gateway", "sqs", "cognito"}
 }

@@ -1,0 +1,23 @@
+variable "environment" {
+  description = "The environment for this deployment"
+  type        = string
+  default     = "{{ .environment }}"
+}
+
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "{{ .region }}"
+}
+
+variable "app_name" {
+  description = "The name of the application"
+  type        = string
+  default     = "{{ .project_name }}"
+}
+
+variable "pool_name" {
+  description = "The name of the Cognito user pool"
+  type        = string
+  default     = "{{ .pool_name }}"
+}

@@ -11,7 +11,6 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/Masterminds/sprig/v3"
 	projectconfig "github.com/NipulM/oisbase/internal/config"
-	awsgenerator "github.com/NipulM/oisbase/internal/services/aws/generator"
 	"github.com/NipulM/oisbase/internal/services/aws/registry"
 	"github.com/NipulM/oisbase/internal/services/aws/templates"
 	"github.com/NipulM/oisbase/internal/utils"
@@ -104,21 +103,6 @@ func (d *DynamoDBService) GenerateModule(config map[string]interface{}) (string,
 		// Generate template files in the instance directory
 		if err := d.generateInstanceFiles(instanceDir, envConfig); err != nil {
 			return "", err
-		}
-
-		projectCfg, err := projectconfig.LoadConfig()
-		if err != nil {
-			return "", fmt.Errorf("failed to load config for IAM generation: %w", err)
-		}
-
-		iamGen := awsgenerator.NewIAMPolicyGenerator(projectCfg)
-		if err := iamGen.GenerateIAMPolicies(
-			d.Name(),
-			tableName,
-			environment,
-			instanceDir,
-		); err != nil {
-			return "", fmt.Errorf("failed to generate IAM policies: %w", err)
 		}
 
 		results = append(results, fmt.Sprintf("  ✓ [%s/%s] Created DynamoDB table: %s", group, environment, tableName))
